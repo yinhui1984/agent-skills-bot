@@ -6,6 +6,7 @@ import json
 
 from prompt_toolkit import Application
 from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.history import InMemoryHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import Layout
 from prompt_toolkit.layout.containers import HSplit, ConditionalContainer
@@ -26,6 +27,7 @@ from agent_skills_bot.utils.mcp_client import (
 
 
 console = Console()
+_QUERY_HISTORY = InMemoryHistory()
 
 COMMANDS = {
     "/list": "List all installed skills",
@@ -52,6 +54,7 @@ def _prompt_query() -> str:
         prompt="\u203a ",
         completer=_CommandCompleter(),
         complete_while_typing=True,
+        history=_QUERY_HISTORY,
     )
     hint_text = "Type a query or use / for commands"
     hint = Label(hint_text, style="class:hint")
@@ -77,7 +80,10 @@ def _prompt_query() -> str:
 
     @bindings.add("enter")
     def _accept(event) -> None:
-        event.app.exit(result=text_area.text.strip())
+        value = text_area.text.strip()
+        if value:
+            _QUERY_HISTORY.append_string(value)
+        event.app.exit(result=value)
 
     @bindings.add("c-c")
     def _cancel(event) -> None:
