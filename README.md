@@ -1,73 +1,137 @@
 # agent-skills-bot
 
-Model-agnostic agent that loads Claude-style skills (SKILL.md + optional scripts) and executes tasks via a minimal tool interface.
+Model-agnostic CLI agent that loads Claude-style skills (SKILL.md + optional scripts) and executes tasks via MCP tools or a guarded shell command entrypoint.
+
+## Features
+- Skill-based routing from SKILL.md (AgentSkills spec)
+- CLI planning flow with optional tool loop
+- Safe tool execution with explicit confirmation prompts
+- MCP integration (stdio servers) with notifications
+- Command allowlist for shell execution (run_command)
+- Interactive CLI with input history
+- Optional reference loading for each skill
+
+## Requirements
+- Python 3.11+
+- DeepSeek API key in `APIKEY_DEEPSEEK`
 
 ## Quick Start
 ```
-python -m venv .venv
-source .venv/bin/activate
-pip install -e .
+make venv
+make install
 export APIKEY_DEEPSEEK=your_key
-python main_cli.py "find some skills which can convert pdf to markdown"
+make run
+```
+
+Run with a single query:
+```
+.venv/bin/python main_cli.py "find some skills which can convert pdf to markdown"
 ```
 
 Interactive mode (prompts when no query is provided):
 ```
-python main_cli.py
+.venv/bin/python main_cli.py
 ```
+
 Single-run mode (no loop):
 ```
-python main_cli.py --once "find some skills which can convert pdf to markdown"
+.venv/bin/python main_cli.py --once "find some skills which can convert pdf to markdown"
 ```
 
 Disable multi-step tool loop:
 ```
-python main_cli.py --no-loop "how many file types in /Users/z/Downloads"
+.venv/bin/python main_cli.py --no-loop "how many file types in /Users/z/Downloads"
 ```
 
 Max tool iterations:
 ```
-python main_cli.py --max-loop-count 5 "how many file types in /Users/z/Downloads"
+.venv/bin/python main_cli.py --max-loop-count 5 "how many file types in /Users/z/Downloads"
 ```
 
-When a command is generated, the CLI will ask for confirmation before execution.
-Routing uses two passes with `deepseek-chat`, and falls back to `deepseek-reasoner` only on failure.
-If a skill declares `allowed-tools`, commands outside that list are blocked.
-
-Built-in skill:
-- No built-in shell tool is enabled; use MCP servers (e.g., filesystem) for controlled file operations.
-
-### Commands
+## CLI Commands
 - `/list` list installed skills
 - `/help` show command help
 - `/mcp` list MCP servers and tools
 - `/mcp-notifications` show pending MCP notifications
 - `/quit` exit the CLI
 
-### MCP
-Create `~/.agent-skills-bot/mcp.json` with:
+## Config Directory
+Default config directory:
+```
+~/.agent-skills-bot
+```
+
+Contents:
+- `skills/` installed skills (each directory contains SKILL.md)
+- `command-allowlist.json` allowlisted shell commands for `run_command`
+- `mcp.json` MCP server configuration
+
+### command-allowlist.json
+Used to gate shell execution when `mcp__shell_mcp__run_command` is allowed by a skill.
+The command is only allowed if the tool entrypoint is permitted by `allowed-tools` and the command matches this allowlist.
+
+Example:
+```
+{
+  "version": 1,
+  "allow": ["which", "ls", "find", "yt-dlp"],
+  "allow_globs": ["ls:*", "find:*", "yt-dlp:*"]
+}
+```
+
+## MCP Setup
+Create `~/.agent-skills-bot/mcp.json`:
 ```
 {
   "mcpServers": {
     "filesystem": {
       "command": "npx",
-      "args": [
-        "-y",
-        "@modelcontextprotocol/server-filesystem",
-        "/Users/z/Downloads",
-        "/Users/z/Desktop"
-      ]
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-filesystem",
+          "/Users/yourname/Downloads",
+          "/Users/yourname/Desktop"
+        ]
     }
   }
 }
 ```
+Adjust the paths for your machine.
+
 MCP tools can be invoked as `mcp__server__tool` with JSON arguments.
 
+## Skills
+Runtime skills live outside the repo at `~/.agent-skills-bot/skills/`.
+A skill is a folder containing `SKILL.md` (and optional scripts or references).
+
+Example layout:
+```
+~/.agent-skills-bot/skills/youtube-transcribe-skill/
+  SKILL.md
+  references/
+```
+
+## Safety Model
+- If a skill declares `allowed-tools`, commands outside that list are blocked.
+- `run_command` is only allowed when both:
+  - `mcp__shell_mcp__run_command` is in `allowed-tools`
+  - the command matches `command-allowlist.json`
+- The CLI always asks for confirmation before executing a tool command.
+
 ## Structure
-- `doc/`: design notes and specs
-- `src/agent_skills_bot/`: package source
-- `tests/`: unit tests (unittest)
-- `main_cli.py`: CLI entrypoint
+- `doc/` design notes and specs
+- `src/agent_skills_bot/` package source
+- `tests/` unit tests (unittest)
+- `main_cli.py` CLI entrypoint
+
+## Development
+```
+make venv
+make install
+make run
+make test
+```
 
 ## Notes
-Runtime skills live outside the repo at `~/.agent-skills-bot/skills/`.
+Routing uses two passes with `deepseek-chat` and falls back to `deepseek-reasoner` only on failure.
+References for a skill can be listed and optionally loaded into the context.
