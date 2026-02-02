@@ -35,7 +35,7 @@ Routing uses two passes with `deepseek-chat`, and falls back to `deepseek-reason
 If a skill declares `allowed-tools`, commands outside that list are blocked.
 
 Built-in skill:
-- `bash-tool` runs standard shell commands when no specific skill applies.
+- No built-in shell tool is enabled; use MCP servers (e.g., filesystem) for controlled file operations.
 
 ### Commands
 - `/list` list installed skills

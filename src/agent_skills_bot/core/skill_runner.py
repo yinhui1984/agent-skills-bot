@@ -96,18 +96,17 @@ def _build_llm_command(
     skill: SkillMeta,
     query: str,
     reference_texts: List[str] | None = None,
+    state_summary: str | None = None,
+    state_json: str | None = None,
 ) -> List[str]:
-    if skill.name == "bash-tool":
+    skill_body = _read_skill_body(pathlib.Path(skill.path))
+    references = _list_reference_files(pathlib.Path(skill.path))
+    if state_summary:
         skill_body = (
-            "You are a shell expert. Use standard POSIX-friendly commands. "
-            "Prefer absolute paths. Avoid destructive commands unless explicitly requested. "
-            "Do not invent paths. If using find -exec, terminate with '\\\\;'. "
-            "Use pipes outside of find, not as a find primary."
+            f"{skill_body}\n\n"
+            "State summary (verbatim values, do not abbreviate paths):\n"
+            f"{state_summary}"
         )
-        references = []
-    else:
-        skill_body = _read_skill_body(pathlib.Path(skill.path))
-        references = _list_reference_files(pathlib.Path(skill.path))
     system_prompt = (
         "You are an execution planner. Return json only. "
         "Output schema: {\"command\": \"...\", \"description\": \"...\"}. "
@@ -129,6 +128,14 @@ def _build_llm_command(
         {
             "role": "user",
             "content": f"Skill instructions:\n{skill_body}\n\nReference files:\n{references_block}",
+        },
+        {
+            "role": "user",
+            "content": (
+                f"State JSON (verbatim values, do not abbreviate):\n{state_json}"
+                if state_json
+                else "State JSON: (none)"
+            ),
         },
         {
             "role": "user",
@@ -188,18 +195,14 @@ def build_command(
     skill_name: str,
     query: str,
     reference_texts: List[str] | None = None,
+    state_summary: str | None = None,
+    state_json: str | None = None,
 ) -> List[str]:
     skill = _find_skill_meta(skill_name)
-    if skill.name == "bash-tool":
-        cmd = _build_llm_command(skill, query, reference_texts)
-        if not cmd:
-            raise RuntimeError("Empty bash command")
-        command_text = cmd[0]
-        return ["bash", "-lc", command_text]
     try:
         return _select_skill_command(skill, query)
     except FileNotFoundError:
-        return _build_llm_command(skill, query, reference_texts)
+        return _build_llm_command(skill, query, reference_texts, state_summary, state_json)
 
 
 def list_reference_files(skill_name: str) -> List[str]:

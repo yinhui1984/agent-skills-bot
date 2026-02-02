@@ -1,12 +1,12 @@
 # Agent Skills Bot MVP Design
 
 ## Goal
-Build a global (not project-scoped) agent that supports a Claude-like skill system (SKILL.md + optional scripts) and a minimal toolset. The MVP focuses on the core data flow and a single universal tool (bash_tool). The design is model-agnostic and avoids tight coupling to any specific LLM provider.
+Build a global (not project-scoped) agent that supports a Claude-like skill system (SKILL.md + optional scripts) and a minimal toolset. The MVP focuses on the core data flow and MCP-based tools. The design is model-agnostic and avoids tight coupling to any specific LLM provider.
 
 ## Key Decisions
 - **Scope**: Global access (not bound to a single repo).
 - **Skills**: Standard SKILL.md files following the AgentSkills specification: https://agentskills.io/specification
-- **Tools**: MVP provides a single `bash_tool` that can run standard Unix commands (cat, echo, which, git, python3, foundry, etc.).
+- **Tools**: MVP relies on MCP tools (e.g., a filesystem MCP server) for local file operations.
 - **Reasoning**: Only task understanding and tool selection use the LLM; everything else is deterministic logic code.
 - **Model Independence**: The agent should work with any compatible chat-completion API; provider-specific code is isolated behind an adapter.
 - **Default UI**: CLI is the primary interface (`main_cli.py`).
@@ -33,7 +33,7 @@ If a skill needs a custom executable entrypoint, use `metadata.entrypoint` in th
 4. **LLM Client (Adapter)**
    - Calls the selected chat-completion provider with tools enabled.
 5. **Tool Executor**
-   - Executes tool calls (MVP: only `bash_tool`).
+   - Executes tool calls (MVP: MCP tools only).
    - Returns output and errors to the model loop.
 6. **Safety Layer**
    - Command blacklist, path guardrails, confirmation on risky ops.
@@ -44,10 +44,10 @@ If a skill needs a custom executable entrypoint, use `metadata.entrypoint` in th
 
 ## Tooling Strategy
 ### MVP (recommended)
-Only `bash_tool`:
+MCP tools only:
 ```
 {
-  "name": "bash_tool",
+  "name": "mcp__filesystem__*",
   "description": "Execute any bash command on the system. Use standard Unix tools and installed CLIs.",
   "parameters": {
     "type": "object",
@@ -134,7 +134,7 @@ Follow the hexagonal UI and logging guide in `doc/ui-logging-guide.md` to keep c
 2. Skill Loader (SKILL.md only)
 3. Prompt Builder
 4. LLM API client adapter
-5. Tool loop with `bash_tool`
+5. Tool loop with MCP tools
 6. Basic safety checks
 
 ## Open Questions
@@ -144,7 +144,7 @@ Follow the hexagonal UI and logging guide in `doc/ui-logging-guide.md` to keep c
 
 ## Current Implementation Snapshot
 - CLI default with command loop and multi-step tool loop (opt-out via `--no-loop`, limit via `--max-loop-count`).
-- Skill discovery from `~/.agent-skills-bot/skills` plus built-in `bash-tool`.
+- Skill discovery from `~/.agent-skills-bot/skills` (no built-in shell tool).
 - Two-pass routing with `deepseek-chat` and fallback to `deepseek-reasoner` on failure.
 - MCP stdio support with auto-reconnect, notifications, and tool invocation (`mcp__server__tool`).
 - References are listed and can be loaded into context (default yes).

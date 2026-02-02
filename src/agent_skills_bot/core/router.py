@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import platform
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from agent_skills_bot.utils.deepseek_client import chat_completion
@@ -11,17 +14,22 @@ from agent_skills_bot.core.skills import filter_skills, load_skills
 
 
 SYSTEM_PROMPT = (
-    "You are an agent that selects which skill to run. "
-    "Return a JSON object only. The word json must appear in this prompt.\n\n"
+    "You are an agent that selects which tool to run. "
+    "Return JSON only. The word json must appear in this prompt.\n\n"
+    "You must choose exactly one option from the Available skills list. "
+    "Treat all options as peers.\n\n"
+    "Decision criteria:\n"
+    "- Choose the option that is the simplest, most reliable, and most direct way to satisfy the user request.\n"
+    "- If a skill provides a purpose-built workflow that significantly reduces steps or risk, choose it.\n"
+    "- Use the environment context (OS, shell, time) to judge whether a skill is appropriate.\n"
+    "- Do not prefer any skill by default.\n\n"
     "Output JSON schema:\n"
     "{\n"
     "  \"action\": \"run_skill\",\n"
-    "  \"skill\": \"<skill name from the list, or bash-tool>\",\n"
+    "  \"skill\": \"<skill name from the list>\",\n"
     "  \"input\": \"...executable parameters only...\",\n"
     "  \"notes\": \"...optional constraints or multi-step hints...\"\n"
     "}\n"
-    "Choose a specific skill when it provides purpose-built workflows (e.g., github-search, skill-installer, desktop-commander). "
-    "Choose bash-tool when the task is best done via direct shell commands.\n"
     "If the task requires multiple steps, include that in notes (e.g., 'needs multi-step: list then aggregate').\n"
     "The input must be the task parameters only, not the user's full sentence.\n"
     "Examples:\n"
@@ -40,11 +48,19 @@ def _format_skills(skills: List[SkillMeta]) -> str:
     return "\n".join(lines)
 
 
+def _environment_context() -> str:
+    shell = os.environ.get("SHELL", "(unknown)")
+    now = datetime.now(timezone.utc).isoformat()
+    os_info = platform.platform()
+    return f"Environment: os={os_info}; shell={shell}; time_utc={now}"
+
+
 def build_messages(user_input: str, skills: List[SkillMeta]) -> List[Dict[str, str]]:
     skills_block = _format_skills(skills)
     prompt = f"{SYSTEM_PROMPT}\n\nAvailable skills:\n{skills_block}"
     return [
         {"role": "system", "content": prompt},
+        {"role": "user", "content": _environment_context()},
         {"role": "user", "content": user_input},
     ]
 

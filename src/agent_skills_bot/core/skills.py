@@ -130,19 +130,6 @@ def load_skills(include_builtin: bool = True) -> List[SkillMeta]:
             )
         )
 
-    if include_builtin:
-        skills.append(
-            SkillMeta(
-                name="bash-tool",
-                description=(
-                    "Run standard shell commands for local tasks (file ops, search, git, python, etc.). "
-                    "Use when no specific skill applies and a bash command can accomplish the task."
-                ),
-                path="(builtin)",
-                metadata={},
-            )
-        )
-
     return skills
 
 

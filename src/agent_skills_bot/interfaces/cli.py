@@ -8,6 +8,8 @@ import logging
 import os
 import platform
 import re
+import shlex
+from typing import Any
 import threading
 import time
 from datetime import datetime, timezone
@@ -145,9 +147,23 @@ def _handle_command(command: str) -> bool:
     return False
 
 
-def run_cli(user_input: str, tool_loop: bool = True, max_loop_count: int = 10) -> None:
+def run_cli(
+    user_input: str,
+    tool_loop: bool = True,
+    max_loop_count: int = 10,
+    session_state: dict[str, object] | None = None,
+) -> None:
     setup_cli_logger()
     logger = logging.getLogger("app.core")
+    if session_state is None:
+        session_state = {
+            "cwd": os.getcwd(),
+            "created": set(),
+            "modified": set(),
+            "last_command": "",
+            "last_paths": [],
+            "last_abs_path": "",
+        }
 
     console.print(Rule("Input", style="blue"))
     console.print(user_input)
@@ -179,6 +195,7 @@ def run_cli(user_input: str, tool_loop: bool = True, max_loop_count: int = 10) -
         reference_texts,
         tool_loop=tool_loop,
         max_loop_count=max_loop_count,
+        session_state=session_state,
     )
 
 
@@ -266,14 +283,21 @@ def _run_tool_loop(
     reference_texts: list[str],
     tool_loop: bool,
     max_loop_count: int,
+    session_state: dict[str, object],
 ) -> None:
     logger = logging.getLogger("app.core")
+    state = session_state
     messages = [
         {
             "role": "system",
-            "content": "You are executing a tool loop. Use the environment context provided.",
+            "content": (
+                "You are executing a tool loop. Use the environment context and State summary provided. "
+                "Prefer explicit absolute paths from State summary over heuristics like ls -t. "
+                "When a State summary includes last_abs_path, use it directly."
+            ),
         },
         {"role": "user", "content": _environment_context()},
+        {"role": "user", "content": _render_state_summary(state)},
         {"role": "user", "content": f"User: {user_input}"},
     ]
     step = 0
@@ -286,7 +310,16 @@ def _run_tool_loop(
             console.print("Max loop count reached.")
             console.print(Rule(style="yellow"))
             return
-        command = build_command(skill_name, current_query, reference_texts)
+        state_summary = _render_state_summary(state)
+        state_json = _render_state_json(state)
+        command_query = current_query
+        command = build_command(
+            skill_name,
+            command_query,
+            reference_texts,
+            state_summary=state_summary,
+            state_json=state_json,
+        )
         command_text = " ".join(command)
         allowed_tools = allowed_tools_for(get_skill_meta(skill_name))
         if allowed_tools:
@@ -362,6 +395,8 @@ def _run_tool_loop(
 
         messages.append({"role": "assistant", "content": f"Command: {command_text}"})
         messages.append({"role": "user", "content": f"Tool output:\n{tool_output}"})
+        _update_state_from_command_and_output(state, command_text, tool_output)
+        messages.append({"role": "user", "content": _render_state_summary(state)})
         decision = _decide_next_step(messages, user_input)
         if decision.get("done"):
             console.print(Rule("Result", style="green"))
@@ -419,6 +454,119 @@ def _environment_context() -> str:
     return f"Environment: os={os_info}; shell={shell}; time_utc={now}"
 
 
+def _render_state_summary(state: dict[str, object]) -> str:
+    cwd = state.get("cwd") or "(unknown)"
+    created = sorted(state.get("created", set()))
+    modified = sorted(state.get("modified", set()))
+    last_command = state.get("last_command") or "(none)"
+    last_abs_path = state.get("last_abs_path") or "(none)"
+    last_paths = state.get("last_paths", [])
+    last_paths_text = ", ".join(last_paths) if last_paths else "(none)"
+    lines = [
+        "State summary:",
+        f"- cwd: {cwd}",
+        f"- last_command: {last_command}",
+        f"- last_abs_path: {last_abs_path}",
+        f"- last_paths: {last_paths_text}",
+        f"- created: {', '.join(created) if created else '(none)'}",
+        f"- modified: {', '.join(modified) if modified else '(none)'}",
+    ]
+    return "\n".join(lines)
+
+
+def _render_state_json(state: dict[str, object]) -> str:
+    payload: dict[str, Any] = {
+        "cwd": state.get("cwd"),
+        "last_command": state.get("last_command"),
+        "last_abs_path": state.get("last_abs_path"),
+        "last_paths": state.get("last_paths"),
+        "created": sorted(state.get("created", set())),
+        "modified": sorted(state.get("modified", set())),
+    }
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def _update_state_from_command_and_output(
+    state: dict[str, object],
+    command_text: str,
+    tool_output: str,
+) -> None:
+    state["last_command"] = command_text
+    shell_cmd = _extract_shell_command(command_text)
+    if not shell_cmd:
+        return
+    cwd = _extract_cwd(shell_cmd)
+    if cwd:
+        state["cwd"] = cwd
+    created, modified = _extract_file_changes(shell_cmd)
+    state.setdefault("created", set()).update(created)
+    state.setdefault("modified", set()).update(modified)
+    output_paths = _extract_paths_from_output(tool_output)
+    if output_paths:
+        state["last_paths"] = output_paths
+        state["last_abs_path"] = output_paths[-1]
+        state.setdefault("modified", set()).update(output_paths)
+
+
+def _extract_shell_command(command_text: str) -> str:
+    if command_text.startswith("bash -lc "):
+        return command_text[len("bash -lc ") :].strip()
+    return ""
+
+
+def _extract_cwd(shell_cmd: str) -> str | None:
+    match = re.search(r"(?:^|[;&|]\\s*)cd\\s+([^;&|]+)", shell_cmd)
+    if not match:
+        return None
+    raw = match.group(1).strip()
+    return _strip_quotes(raw)
+
+
+def _extract_file_changes(shell_cmd: str) -> tuple[set[str], set[str]]:
+    created: set[str] = set()
+    modified: set[str] = set()
+    # Redirections: > or >> target
+    for target in re.findall(r">>\\s*([^;&|]+)|>\\s*([^;&|]+)", shell_cmd):
+        path = _strip_quotes(next((t for t in target if t), ""))
+        if path:
+            modified.add(path)
+    tokens = _safe_split(shell_cmd)
+    if not tokens:
+        return created, modified
+    if tokens[0] in {"touch", "mkdir"}:
+        for token in tokens[1:]:
+            if token.startswith("-"):
+                continue
+            created.add(_strip_quotes(token))
+    if tokens[0] in {"cp", "mv"} and len(tokens) >= 3:
+        dest = _strip_quotes(tokens[-1])
+        if dest:
+            modified.add(dest)
+    return created, modified
+
+
+def _extract_paths_from_output(output: str) -> list[str]:
+    paths: list[str] = []
+    for line in output.splitlines():
+        match = re.search(r"(/[^\\s'\\\"]+)", line)
+        if match:
+            path = match.group(1)
+            if path not in paths:
+                paths.append(path)
+    return paths
+
+
+def _strip_quotes(value: str) -> str:
+    return value.strip().strip("\"'")
+
+
+def _safe_split(command: str) -> list[str]:
+    try:
+        return shlex.split(command)
+    except ValueError:
+        return []
+
+
 def run_cli_loop(
     initial_query: str | None,
     loop: bool = True,
@@ -426,6 +574,14 @@ def run_cli_loop(
     max_loop_count: int = 10,
 ) -> None:
     setup_cli_logger()
+    session_state: dict[str, object] = {
+        "cwd": os.getcwd(),
+        "created": set(),
+        "modified": set(),
+        "last_command": "",
+        "last_paths": [],
+        "last_abs_path": "",
+    }
     stop_event = threading.Event()
     notify_thread = threading.Thread(
         target=_notification_loop,
@@ -450,7 +606,12 @@ def run_cli_loop(
                 if not loop:
                     break
                 continue
-            run_cli(pending, tool_loop=tool_loop, max_loop_count=max_loop_count)
+            run_cli(
+                pending,
+                tool_loop=tool_loop,
+                max_loop_count=max_loop_count,
+                session_state=session_state,
+            )
             pending = None
             if not loop:
                 break
