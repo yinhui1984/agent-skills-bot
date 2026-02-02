@@ -1,7 +1,7 @@
 """Data models for agent-skills-bot."""
 
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Union
 
 
 @dataclass(frozen=True)
@@ -15,7 +15,7 @@ class SkillMeta:
     name: str
     description: str
     path: str
-    metadata: Dict[str, str]
+    metadata: Dict[str, Union[str, List[str]]]
 
 
 @dataclass(frozen=True)

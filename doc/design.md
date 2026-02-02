@@ -39,6 +39,8 @@ If a skill needs a custom executable entrypoint, use `metadata.entrypoint` in th
    - Command blacklist, path guardrails, confirmation on risky ops.
 7. **CLI Adapter**
    - CLI for input, logs, and formatted output.
+8. **Allowed Tools**
+   - Respect `allowed-tools` in SKILL.md by blocking disallowed commands.
 
 ## Tooling Strategy
 ### MVP (recommended)

@@ -35,7 +35,7 @@ def _format_skills(skills: List[SkillMeta]) -> str:
     lines = []
     for skill in skills:
         desc = skill.description or "(no description)"
-        lines.append(f"- {skill.name}: {desc}")
+        lines.append(f"- {skill.name}: {desc} (path: {skill.path})")
     return "\n".join(lines)
 
 

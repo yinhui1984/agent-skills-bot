@@ -10,7 +10,14 @@ from rich.panel import Panel
 from rich.text import Text
 
 from agent_skills_bot.core.router import route_skill
-from agent_skills_bot.core.skill_runner import build_command, execute_command
+from agent_skills_bot.core.skill_runner import (
+    allowed_tools_for,
+    build_command,
+    execute_command,
+    get_skill_meta,
+    list_reference_files,
+    read_reference_files,
+)
 from agent_skills_bot.utils.logger import setup_cli_logger
 
 
@@ -43,13 +50,38 @@ def run_cli(user_input: str) -> None:
 
     try:
         skill_query = route_skill(user_input)
-        command = build_command(skill_query.skill, skill_query.query)
+        references = list_reference_files(skill_query.skill)
+        reference_texts = []
+        if references:
+            console.print(Panel("\n".join(references), title="References", border_style="cyan"))
+            load_refs = console.input("Load references into context? (y/N): ").strip().lower()
+            if load_refs in {"y", "yes"}:
+                reference_texts = read_reference_files(references)
+        command = build_command(skill_query.skill, skill_query.query, reference_texts)
     except Exception as exc:
         logger.error(str(exc))
         console.print(Panel(str(exc), title="Error", border_style="red"))
         return
 
     command_text = " ".join(command)
+    allowed_tools = allowed_tools_for(get_skill_meta(skill_query.skill))
+    if allowed_tools:
+        console.print(
+            Panel(
+                ", ".join(allowed_tools),
+                title="allowed-tools",
+                border_style="cyan",
+            )
+        )
+        if command and command[0] not in allowed_tools:
+            console.print(
+                Panel(
+                    f"Command tool '{command[0]}' is not in allowed-tools.",
+                    title="Blocked",
+                    border_style="red",
+                )
+            )
+            return
     console.print(Panel(command_text, title="Command", border_style="magenta"))
     confirm = console.input("[bold yellow]Execute command?[/bold yellow] (Y/n): ").strip().lower()
     if confirm and confirm not in {"y", "yes"}:

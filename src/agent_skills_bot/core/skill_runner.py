@@ -10,7 +10,7 @@ import json
 import shlex
 import subprocess
 from dataclasses import dataclass
-from typing import List, Tuple
+from typing import List
 
 from agent_skills_bot.core.models import SkillMeta, SkillResult
 from agent_skills_bot.core.skills import load_skills
@@ -77,17 +77,39 @@ def _read_skill_body(skill_path: pathlib.Path) -> str:
     return "\n".join(lines).strip()
 
 
-def _build_llm_command(skill: SkillMeta, query: str) -> List[str]:
+def _list_reference_files(skill_path: pathlib.Path) -> List[str]:
+    refs_dir = skill_path / "references"
+    if not refs_dir.exists():
+        return []
+    return [str(path) for path in refs_dir.rglob("*") if path.is_file()]
+
+
+def _build_llm_command(
+    skill: SkillMeta,
+    query: str,
+    reference_texts: List[str] | None = None,
+) -> List[str]:
     skill_body = _read_skill_body(pathlib.Path(skill.path))
+    references = _list_reference_files(pathlib.Path(skill.path))
     system_prompt = (
         "You are an execution planner. Return json only. "
         "Output schema: {\"command\": \"...\", \"description\": \"...\"}. "
         "Use the provided skill instructions to craft a command for the user query."
     )
 
+    references_block = "\n".join(f"- {path}" for path in references) or "(none)"
+    references_content = "\n\n".join(reference_texts or [])
+
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Skill instructions:\n{skill_body}"},
+        {
+            "role": "user",
+            "content": f"Skill instructions:\n{skill_body}\n\nReference files:\n{references_block}",
+        },
+        {
+            "role": "user",
+            "content": f"Reference contents:\n{references_content}" if references_content else "Reference contents: (not loaded)",
+        },
         {"role": "user", "content": f"User request: {query}"},
     ]
     response = chat_completion(messages, response_format={"type": "json_object"})
@@ -102,6 +124,15 @@ def _build_llm_command(skill: SkillMeta, query: str) -> List[str]:
         raise RuntimeError("LLM command was empty")
 
     return shlex.split(command)
+
+
+def allowed_tools_for(skill: SkillMeta) -> List[str]:
+    tools = skill.metadata.get("allowed-tools") or skill.metadata.get("metadata.allowed-tools")
+    if isinstance(tools, list):
+        return [str(tool) for tool in tools if str(tool).strip()]
+    if isinstance(tools, str):
+        return [tool.strip() for tool in tools.split(",") if tool.strip()]
+    return []
 
 
 def _run_command(command: List[str]) -> str:
@@ -124,12 +155,35 @@ def _find_skill_meta(skill_name: str) -> SkillMeta:
     raise FileNotFoundError(f"Skill not found: {skill_name}")
 
 
-def build_command(skill_name: str, query: str) -> List[str]:
+def get_skill_meta(skill_name: str) -> SkillMeta:
+    return _find_skill_meta(skill_name)
+
+
+def build_command(
+    skill_name: str,
+    query: str,
+    reference_texts: List[str] | None = None,
+) -> List[str]:
     skill = _find_skill_meta(skill_name)
     try:
         return _select_skill_command(skill, query)
     except FileNotFoundError:
-        return _build_llm_command(skill, query)
+        return _build_llm_command(skill, query, reference_texts)
+
+
+def list_reference_files(skill_name: str) -> List[str]:
+    skill = _find_skill_meta(skill_name)
+    return _list_reference_files(pathlib.Path(skill.path))
+
+
+def read_reference_files(paths: List[str]) -> List[str]:
+    contents = []
+    for path in paths:
+        try:
+            contents.append(pathlib.Path(path).read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            continue
+    return contents
 
 
 async def execute_command(skill_name: str, command: List[str]) -> SkillResult:

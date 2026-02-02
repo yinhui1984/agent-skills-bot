@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import pathlib
 import re
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Tuple, Union
 
 from agent_skills_bot.core.models import SkillMeta
 
@@ -25,13 +25,14 @@ def _read_skill_md(path: pathlib.Path) -> str:
         return ""
 
 
-def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
+def _parse_frontmatter(lines: List[str]) -> Dict[str, Union[str, List[str]]]:
     if not lines or lines[0].strip() != "---":
         return {}
 
-    data: Dict[str, str] = {}
-    metadata: Dict[str, str] = {}
+    data: Dict[str, Union[str, List[str]]] = {}
+    metadata: Dict[str, Union[str, List[str]]] = {}
     in_metadata = False
+    list_key: Tuple[str, bool] | None = None
 
     for line in lines[1:]:
         stripped = line.rstrip("\n")
@@ -43,20 +44,39 @@ def _parse_frontmatter(lines: List[str]) -> Dict[str, str]:
 
         if stripped.startswith("metadata:"):
             in_metadata = True
+            list_key = None
             continue
 
         if in_metadata:
             if not stripped.startswith("  "):
                 in_metadata = False
+                list_key = None
             else:
-                key, value = _split_kv(stripped.strip())
+                inner = stripped.strip()
+                if inner.startswith("- ") and list_key and list_key[1]:
+                    metadata[list_key[0]].append(inner[2:].strip())
+                    continue
+                key, value = _split_kv(inner)
                 if key:
-                    metadata[key] = value
+                    if value == "":
+                        metadata[key] = []
+                        list_key = (key, True)
+                    else:
+                        metadata[key] = value
+                        list_key = (key, False)
                 continue
 
+        if stripped.startswith("- ") and list_key and list_key[1]:
+            data[list_key[0]].append(stripped[2:].strip())
+            continue
         key, value = _split_kv(stripped)
         if key:
-            data[key] = value
+            if value == "":
+                data[key] = []
+                list_key = (key, True)
+            else:
+                data[key] = value
+                list_key = (key, False)
 
     if metadata:
         data.update({f"metadata.{k}": v for k, v in metadata.items()})
@@ -89,13 +109,12 @@ def load_skills() -> List[SkillMeta]:
         lines = skill_md.splitlines()
         frontmatter = _parse_frontmatter(lines)
 
-        declared_name = frontmatter.get("name")
-        description = frontmatter.get("description", "").strip()
+        declared_name = str(frontmatter.get("name", "")).strip()
+        description = str(frontmatter.get("description", "")).strip()
         if not declared_name or not description:
             continue
         dir_name = skill_dir.name
-        normalized_dir = dir_name.replace("_", "-")
-        if declared_name != dir_name and declared_name != normalized_dir:
+        if declared_name != dir_name:
             continue
         if len(declared_name) > 64 or not NAME_PATTERN.match(declared_name):
             continue

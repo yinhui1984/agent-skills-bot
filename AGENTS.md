@@ -46,3 +46,4 @@ The MVP is model-agnostic and centers on:
 Keep orchestration deterministic and reserve AI for task understanding and tool selection.
 Default UI is CLI; DeepSeek V3 JSON mode is the default model configuration.
 Skills follow the AgentSkills specification: https://agentskills.io/specification
+Honor `allowed-tools` when present (block commands outside the list).

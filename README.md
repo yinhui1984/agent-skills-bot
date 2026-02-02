@@ -22,6 +22,7 @@ python main_cli.py --once "find some skills which can convert pdf to markdown"
 
 When a command is generated, the CLI will ask for confirmation before execution.
 Routing uses two passes with `deepseek-chat`, and falls back to `deepseek-reasoner` only on failure.
+If a skill declares `allowed-tools`, commands outside that list are blocked.
 
 ## Structure
 - `doc/`: design notes and specs
