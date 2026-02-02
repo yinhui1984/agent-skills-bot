@@ -20,9 +20,22 @@ Single-run mode (no loop):
 python main_cli.py --once "find some skills which can convert pdf to markdown"
 ```
 
+Disable multi-step tool loop:
+```
+python main_cli.py --no-loop "how many file types in /Users/z/Downloads"
+```
+
+Max tool iterations:
+```
+python main_cli.py --max-loop-count 5 "how many file types in /Users/z/Downloads"
+```
+
 When a command is generated, the CLI will ask for confirmation before execution.
 Routing uses two passes with `deepseek-chat`, and falls back to `deepseek-reasoner` only on failure.
 If a skill declares `allowed-tools`, commands outside that list are blocked.
+
+Built-in skill:
+- `bash-tool` runs standard shell commands when no specific skill applies.
 
 ### Commands
 - `/list` list installed skills

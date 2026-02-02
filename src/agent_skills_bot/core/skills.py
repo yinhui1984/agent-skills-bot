@@ -100,7 +100,7 @@ def _iter_skill_dirs(root: pathlib.Path) -> Iterable[pathlib.Path]:
     return skill_dirs
 
 
-def load_skills() -> List[SkillMeta]:
+def load_skills(include_builtin: bool = True) -> List[SkillMeta]:
     skills: List[SkillMeta] = []
     root = _skills_root()
 
@@ -127,6 +127,19 @@ def load_skills() -> List[SkillMeta]:
                 description=description,
                 path=str(skill_dir),
                 metadata=frontmatter,
+            )
+        )
+
+    if include_builtin:
+        skills.append(
+            SkillMeta(
+                name="bash-tool",
+                description=(
+                    "Run standard shell commands for local tasks (file ops, search, git, python, etc.). "
+                    "Use when no specific skill applies and a bash command can accomplish the task."
+                ),
+                path="(builtin)",
+                metadata={},
             )
         )
 

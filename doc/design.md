@@ -141,3 +141,10 @@ Follow the hexagonal UI and logging guide in `doc/ui-logging-guide.md` to keep c
 - Skills storage path: `~/.agent-skills-bot/skills/` vs XDG paths.
 - Should the agent keep a global working directory or per-session context?
 - How much conversation history to persist between sessions?
+
+## Current Implementation Snapshot
+- CLI default with command loop and multi-step tool loop (opt-out via `--no-loop`, limit via `--max-loop-count`).
+- Skill discovery from `~/.agent-skills-bot/skills` plus built-in `bash-tool`.
+- Two-pass routing with `deepseek-chat` and fallback to `deepseek-reasoner` on failure.
+- MCP stdio support with auto-reconnect, notifications, and tool invocation (`mcp__server__tool`).
+- References are listed and can be loaded into context (default yes).

@@ -16,13 +16,14 @@ SYSTEM_PROMPT = (
     "Output JSON schema:\n"
     "{\n"
     "  \"action\": \"run_skill\",\n"
-    "  \"skill\": \"<skill name from the list>\",\n"
+    "  \"skill\": \"<skill name from the list, or bash-tool>\",\n"
     "  \"input\": \"...executable parameters only...\",\n"
-    "  \"notes\": \"...optional constraints...\"\n"
+    "  \"notes\": \"...optional constraints or multi-step hints...\"\n"
     "}\n"
-    "The input must be the task parameters only, not the user's full sentence. "
-    "Remove command verbs like 'search', 'find', 'run', 'execute', tool names, or platforms, "
-    "and keep only the content needed to perform the task.\n"
+    "Choose a specific skill when it provides purpose-built workflows (e.g., github-search, skill-installer, desktop-commander). "
+    "Choose bash-tool when the task is best done via direct shell commands.\n"
+    "If the task requires multiple steps, include that in notes (e.g., 'needs multi-step: list then aggregate').\n"
+    "The input must be the task parameters only, not the user's full sentence.\n"
     "Examples:\n"
     "- User: \"search github voice to text\" -> input: \"voice to text\"\n"
     "- User: \"github search rust wasm\" -> input: \"rust wasm\"\n"
@@ -103,7 +104,7 @@ def _confirm_messages(user_input: str, draft: SkillQuery, skills: List[SkillMeta
 
 
 def route_skill(user_input: str) -> SkillQuery:
-    skills = load_skills()
+    skills = load_skills(include_builtin=True)
     if not skills:
         raise ValueError("No skills found under ~/.agent-skills-bot/skills")
     candidates = filter_skills(skills, user_input)

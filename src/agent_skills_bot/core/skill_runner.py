@@ -82,7 +82,14 @@ def _list_reference_files(skill_path: pathlib.Path) -> List[str]:
     refs_dir = skill_path / "references"
     if not refs_dir.exists():
         return []
-    return [str(path) for path in refs_dir.rglob("*") if path.is_file()]
+    files = []
+    for path in refs_dir.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part.startswith(".") for part in path.parts):
+            continue
+        files.append(str(path))
+    return files
 
 
 def _build_llm_command(
@@ -90,8 +97,17 @@ def _build_llm_command(
     query: str,
     reference_texts: List[str] | None = None,
 ) -> List[str]:
-    skill_body = _read_skill_body(pathlib.Path(skill.path))
-    references = _list_reference_files(pathlib.Path(skill.path))
+    if skill.name == "bash-tool":
+        skill_body = (
+            "You are a shell expert. Use standard POSIX-friendly commands. "
+            "Prefer absolute paths. Avoid destructive commands unless explicitly requested. "
+            "Do not invent paths. If using find -exec, terminate with '\\\\;'. "
+            "Use pipes outside of find, not as a find primary."
+        )
+        references = []
+    else:
+        skill_body = _read_skill_body(pathlib.Path(skill.path))
+        references = _list_reference_files(pathlib.Path(skill.path))
     system_prompt = (
         "You are an execution planner. Return json only. "
         "Output schema: {\"command\": \"...\", \"description\": \"...\"}. "
@@ -158,7 +174,7 @@ def _run_command(command: List[str]) -> str:
 
 
 def _find_skill_meta(skill_name: str) -> SkillMeta:
-    for skill in load_skills():
+    for skill in load_skills(include_builtin=True):
         if skill.name == skill_name or pathlib.Path(skill.path).name == skill_name:
             return skill
     raise FileNotFoundError(f"Skill not found: {skill_name}")
@@ -174,6 +190,12 @@ def build_command(
     reference_texts: List[str] | None = None,
 ) -> List[str]:
     skill = _find_skill_meta(skill_name)
+    if skill.name == "bash-tool":
+        cmd = _build_llm_command(skill, query, reference_texts)
+        if not cmd:
+            raise RuntimeError("Empty bash command")
+        command_text = cmd[0]
+        return ["bash", "-lc", command_text]
     try:
         return _select_skill_command(skill, query)
     except FileNotFoundError:
@@ -190,7 +212,7 @@ def read_reference_files(paths: List[str]) -> List[str]:
     for path in paths:
         try:
             contents.append(pathlib.Path(path).read_text(encoding="utf-8"))
-        except FileNotFoundError:
+        except (FileNotFoundError, UnicodeDecodeError):
             continue
     return contents
 
