@@ -28,7 +28,8 @@ from prompt_toolkit.widgets import Frame, TextArea, Label
 from rich.rule import Rule
 from rich.text import Text
 
-from agent_skills_bot.core.router import route_skill
+from agent_skills_bot.core.router import route_plan
+from agent_skills_bot.core.models import SkillPlan, SkillStep, StepResult
 from agent_skills_bot.core.skill_runner import (
     allowed_tools_for,
     build_command,
@@ -157,6 +158,18 @@ def _render_banner() -> None:
     console.print(banner, style="bold cyan")
 
 
+def _render_plan(plan: SkillPlan) -> None:
+    console.print(Rule("Plan", style="blue"))
+    for idx, step in enumerate(plan.steps, 1):
+        requires = ", ".join(step.requires or []) if step.requires else "(none)"
+        notes = step.notes or ""
+        console.print(f"{idx}. {step.skill}")
+        console.print(f"   input: {step.input}")
+        console.print(f"   requires: {requires}")
+        if notes:
+            console.print(f"   notes: {notes}")
+
+
 def _handle_command(command: str) -> bool:
     if command == "/":
         _render_command_help()
@@ -232,31 +245,38 @@ def run_cli(
             "last_command": "",
             "last_paths": [],
             "last_abs_path": "",
+            "artifacts": {},
         }
 
     console.print("Running...", style="yellow")
 
     try:
-        skill_query = route_skill(user_input)
-        references = list_reference_files(skill_query.skill)
-        reference_texts = []
-        if references:
-            console.print(Rule("References", style="cyan"))
+        plan = route_plan(user_input)
+        _render_plan(plan)
+        reference_texts_by_skill: dict[str, list[str]] = {}
+        seen_skills: set[str] = set()
+        for step in plan.steps:
+            if step.skill in seen_skills:
+                continue
+            seen_skills.add(step.skill)
+            references = list_reference_files(step.skill)
+            if not references:
+                continue
+            console.print(Rule(f"References ({step.skill})", style="cyan"))
             console.print("\n".join(references))
             load_refs = console.input("Load references into context? (Y/n): ").strip().lower()
             if not load_refs or load_refs in {"y", "yes"}:
-                reference_texts = read_reference_files(references)
+                reference_texts_by_skill[step.skill] = read_reference_files(references)
     except Exception as exc:
         logger.error(str(exc))
         console.print(Rule("Error", style="red"))
         console.print(str(exc))
         return
 
-    _run_tool_loop(
-        skill_query.skill,
-        skill_query.query,
+    _run_plan(
+        plan,
         user_input,
-        reference_texts,
+        reference_texts_by_skill,
         tool_loop=tool_loop,
         max_loop_count=max_loop_count,
         session_state=session_state,
@@ -340,15 +360,51 @@ def _normalize_mcp_args(args: dict) -> dict:
     return args
 
 
-def _run_tool_loop(
-    skill_name: str,
-    query: str,
+def _run_plan(
+    plan: SkillPlan,
+    user_input: str,
+    reference_texts_by_skill: dict[str, list[str]],
+    tool_loop: bool,
+    max_loop_count: int,
+    session_state: dict[str, object],
+) -> None:
+    effective_loop = tool_loop if len(plan.steps) == 1 else False
+    if len(plan.steps) > 1 and tool_loop:
+        console.print(
+            "Multi-step plan detected; disabling per-step tool loop to honor the plan.",
+            style="dim",
+        )
+    for idx, step in enumerate(plan.steps, 1):
+        missing = _check_requires(step.requires, session_state)
+        if missing:
+            console.print(Rule("Blocked", style="red"))
+            console.print(f"Step {idx} blocked; missing requirements: {', '.join(missing)}")
+            return
+        reference_texts = reference_texts_by_skill.get(step.skill, [])
+        result = _execute_step(
+            step,
+            user_input,
+            reference_texts,
+            tool_loop=effective_loop,
+            max_loop_count=max_loop_count,
+            session_state=session_state,
+        )
+        if result.status != "ok":
+            console.print(Rule("Error", style="red"))
+            console.print(result.summary or "Step failed.")
+            return
+    console.print(Rule("Result", style="green"))
+    console.print("Plan complete.")
+
+
+def _execute_step(
+    step: SkillStep,
     user_input: str,
     reference_texts: list[str],
     tool_loop: bool,
     max_loop_count: int,
     session_state: dict[str, object],
-) -> None:
+) -> StepResult:
     logger = logging.getLogger("app.core")
     state = session_state
     messages = [
@@ -363,41 +419,47 @@ def _run_tool_loop(
         {"role": "user", "content": _environment_context()},
         {"role": "user", "content": _render_state_summary(state)},
         {"role": "user", "content": f"User: {user_input}"},
+        {"role": "user", "content": f"Step input: {step.input}"},
     ]
-    step = 0
-    current_query = query
+    loop_step = 0
+    current_query = step.input
     last_pid: int | None = None
+    last_output = ""
     while True:
-        step += 1
-        if step > max_loop_count:
+        loop_step += 1
+        if loop_step > max_loop_count:
             console.print(Rule("Warning", style="yellow"))
             console.print("Max loop count reached.")
-            return
+            return StepResult(status="max_loop", summary="Max loop count reached.", raw_output=last_output)
         state_summary = _render_state_summary(state)
         state_json = _render_state_json(state)
         command_query = current_query
         command = build_command(
-            skill_name,
+            step.skill,
             command_query,
             reference_texts,
             state_summary=state_summary,
             state_json=state_json,
         )
         command_text = " ".join(command)
-        allowed_tools = allowed_tools_for(get_skill_meta(skill_name))
+        allowed_tools = allowed_tools_for(get_skill_meta(step.skill))
         if allowed_tools:
             console.print(Rule("allowed-tools", style="cyan"))
             console.print(", ".join(allowed_tools))
             if command and command[0] not in allowed_tools:
                 console.print(Rule("Blocked", style="red"))
                 console.print(f"Command tool '{command[0]}' is not in allowed-tools.")
-                return
+                return StepResult(
+                    status="blocked",
+                    summary=f"Command tool '{command[0]}' is not in allowed-tools.",
+                    raw_output=last_output,
+                )
         console.print(Rule("Command", style="magenta"))
         console.print(command_text)
         confirm = console.input("[bold yellow]Execute command?[/bold yellow] (Y/n): ").strip().lower()
         if confirm and confirm not in {"y", "yes"}:
             console.print("Cancelled.", style="dim")
-            return
+            return StepResult(status="cancelled", summary="Cancelled by user.", raw_output=last_output)
 
         try:
             if command and command[0].startswith("mcp__"):
@@ -434,14 +496,18 @@ def _run_tool_loop(
                 _render_output(output.splitlines())
                 tool_output = output
             else:
-                result = asyncio.run(execute_command(skill_name, command))
+                result = asyncio.run(execute_command(step.skill, command))
                 _render_output(result.lines)
                 tool_output = result.raw_output
         except Exception as exc:
             logger.error(str(exc))
             console.print(Rule("Error", style="red"))
             console.print(str(exc))
-            return
+            return StepResult(status="error", summary=str(exc), raw_output=last_output)
+
+        last_output = tool_output
+        _update_state_from_command_and_output(state, command_text, tool_output)
+        _update_artifacts_from_output(state, tool_output)
 
         if command and command[0].startswith("mcp__"):
             pid_match = re.search(r"PID\\s+(\\d+)", tool_output)
@@ -449,25 +515,25 @@ def _run_tool_loop(
                 last_pid = int(pid_match.group(1))
 
         if not tool_loop:
-            return
+            summary = _summarize_tool_output(tool_output, user_input)
+            return StepResult(status="ok", summary=summary or "Done.", raw_output=tool_output, artifacts=state.get("artifacts", {}))
 
         messages.append({"role": "assistant", "content": f"Command: {command_text}"})
         messages.append({"role": "user", "content": f"Tool output:\n{tool_output}"})
         summary = _summarize_tool_output(tool_output, user_input)
         if summary:
             messages.append({"role": "assistant", "content": f"Tool summary: {summary}"})
-        _update_state_from_command_and_output(state, command_text, tool_output)
         messages.append({"role": "user", "content": _render_state_summary(state)})
         decision = _decide_next_step(messages, user_input)
         if decision.get("done"):
             console.print(Rule("Result", style="green"))
             console.print(decision.get("summary", "Done."))
-            return
+            return StepResult(status="ok", summary=decision.get("summary", "Done."), raw_output=tool_output, artifacts=state.get("artifacts", {}))
         current_query = decision.get("next_input", "")
         if not current_query:
             console.print(Rule("Warning", style="yellow"))
             console.print("No next step provided; stopping.")
-            return
+            return StepResult(status="stopped", summary="No next step provided.", raw_output=tool_output)
 
 
 def _decide_next_step(messages: list[dict[str, str]], user_input: str) -> dict:
@@ -543,6 +609,13 @@ def _render_state_summary(state: dict[str, object]) -> str:
     last_abs_path = state.get("last_abs_path") or "(none)"
     last_paths = state.get("last_paths", [])
     last_paths_text = ", ".join(last_paths) if last_paths else "(none)"
+    artifacts = state.get("artifacts", {}) or {}
+    artifact_keys = ", ".join(sorted(artifacts.keys())) if artifacts else "(none)"
+    artifact_file = artifacts.get("file_path") if isinstance(artifacts, dict) else None
+    artifact_urls = artifacts.get("url_list") if isinstance(artifacts, dict) else None
+    artifact_text = artifacts.get("text") if isinstance(artifacts, dict) else None
+    url_count = len(artifact_urls) if isinstance(artifact_urls, list) else 0
+    text_len = len(artifact_text) if isinstance(artifact_text, str) else 0
     lines = [
         "State summary:",
         f"- cwd: {cwd}",
@@ -551,6 +624,10 @@ def _render_state_summary(state: dict[str, object]) -> str:
         f"- last_paths: {last_paths_text}",
         f"- created: {', '.join(created) if created else '(none)'}",
         f"- modified: {', '.join(modified) if modified else '(none)'}",
+        f"- artifacts: {artifact_keys}",
+        f"- artifacts.file_path: {artifact_file or '(none)'}",
+        f"- artifacts.url_list.count: {url_count}",
+        f"- artifacts.text.length: {text_len}",
     ]
     return "\n".join(lines)
 
@@ -563,8 +640,99 @@ def _render_state_json(state: dict[str, object]) -> str:
         "last_paths": state.get("last_paths"),
         "created": sorted(state.get("created", set())),
         "modified": sorted(state.get("modified", set())),
+        "artifacts": state.get("artifacts", {}),
     }
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _update_artifacts_from_output(state: dict[str, object], tool_output: str) -> None:
+    artifacts = _extract_artifacts(tool_output)
+    if not artifacts:
+        return
+    existing = state.get("artifacts")
+    if not isinstance(existing, dict):
+        existing = {}
+        state["artifacts"] = existing
+    _merge_artifacts(existing, artifacts)
+
+
+def _extract_artifacts(tool_output: str) -> dict[str, object]:
+    artifacts: dict[str, object] = {}
+    text = ""
+    try:
+        payload = json.loads(tool_output)
+        if isinstance(payload, dict):
+            content = payload.get("content")
+            if isinstance(content, list):
+                parts = []
+                for item in content:
+                    if isinstance(item, dict) and item.get("type") == "text":
+                        parts.append(str(item.get("text", "")))
+                text = "\n".join(part for part in parts if part)
+    except json.JSONDecodeError:
+        pass
+
+    if not text:
+        text = tool_output.strip()
+
+    if text:
+        artifacts["text"] = text
+        urls = re.findall(r"https?://[^\\s'\\\")]+", text)
+        if urls:
+            artifacts["url_list"] = list(dict.fromkeys(urls))
+
+    paths = _extract_paths_from_output(tool_output)
+    if paths:
+        artifacts["paths"] = paths
+        artifacts["file_path"] = paths[-1]
+    return artifacts
+
+
+def _merge_artifacts(target: dict[str, object], incoming: dict[str, object]) -> None:
+    for key, value in incoming.items():
+        if isinstance(value, list):
+            existing = target.get(key)
+            if isinstance(existing, list):
+                for item in value:
+                    if item not in existing:
+                        existing.append(item)
+            else:
+                target[key] = list(value)
+        else:
+            target[key] = value
+
+
+def _check_requires(requires: list[str] | None, state: dict[str, object]) -> list[str]:
+    if not requires:
+        return []
+    artifacts = state.get("artifacts", {})
+    missing = []
+    for req in requires:
+        if not _resolve_requirement(req, artifacts, state):
+            missing.append(req)
+    return missing
+
+
+def _resolve_requirement(req: str, artifacts: dict[str, object], state: dict[str, object]) -> bool:
+    req = req.strip()
+    if not req:
+        return True
+    if "." not in req:
+        value = artifacts.get(req)
+        return bool(value)
+    root, *parts = req.split(".")
+    if root == "artifacts":
+        data: object = artifacts
+    elif root == "state":
+        data = state
+    else:
+        return False
+    for part in parts:
+        if isinstance(data, dict) and part in data:
+            data = data[part]
+        else:
+            return False
+    return bool(data)
 
 
 def _update_state_from_command_and_output(
@@ -632,9 +800,25 @@ def _extract_paths_from_output(output: str) -> list[str]:
         match = re.search(r"(/[^\\s'\\\"]+)", line)
         if match:
             path = match.group(1)
-            if path not in paths:
+            if _looks_like_local_path(path) and path not in paths:
                 paths.append(path)
     return paths
+
+
+def _looks_like_local_path(path: str) -> bool:
+    if path.startswith("http://") or path.startswith("https://"):
+        return False
+    allowed_prefixes = (
+        "/Users/",
+        "/home/",
+        "/tmp/",
+        "/var/",
+        "/private/",
+        "/Volumes/",
+        "/opt/",
+        "/etc/",
+    )
+    return path.startswith(allowed_prefixes)
 
 
 def _strip_quotes(value: str) -> str:
@@ -664,6 +848,7 @@ def run_cli_loop(
         "last_command": "",
         "last_paths": [],
         "last_abs_path": "",
+        "artifacts": {},
     }
     stop_event = threading.Event()
     notify_thread = threading.Thread(
