@@ -1,0 +1,2390 @@
+
+你知道 agent skill 标准吗
+
+2月1日
+我知道一些关于 AI Agent Skill 的标准和规范，但具体要看你指的是哪个领域的标准。让我搜索一下最新的信息，确保给你准确的答案。
+
+在 AI Agent 领域，有几个相关的标准概念：
+
+MCP (Model Context Protocol) - Anthropic 推出的协议，用于标准化 AI 应用与外部数据源和工具的连接方式
+OpenAI 的 Function Calling / Tools 标准 - 定义了如何让 LLM 调用外部函数和工具
+LangChain 的 Tools 框架 - 提供了构建 AI agent 工具的标准接口
+Agent Protocol - 由 AI Engineer Foundation 提出的开放标准
+不过，结合你当前看到的 Claude 系统提示中的 <available_skills> 部分，这里提到的 "skill" 更像是 Anthropic 特有的技能系统，用于增强 Claude 在特定任务上的能力。
+
+从系统提示来看，这些 skills 包含：
+
+文档类：docx, pdf, pptx, xlsx
+前端开发：frontend-design
+产品知识：product-self-knowledge
+元技能：skill-creator（用于创建新技能）
+每个 skill 都有一个 SKILL.md 文件，包含该领域的最佳实践。
+
+你想了解的是哪种 skill 标准？
+
+Anthropic Claude 的 skill 系统？
+通用的 AI Agent 工具/技能标准（如 MCP, OpenAI Tools）？
+还是 Web3 领域特定的 agent skill 标准？
+就是每个 skill 都有一个 skill.MD 然后可选的有脚本那种
+
+2月1日
+明白了！你说的是 Anthropic Claude 的 Skill 系统，这是一个相对新的特性。让我详细解释一下这个标准：
+
+Claude Skill 标准结构
+根据系统提示中的信息，每个 skill 的标准结构是：
+
+/mnt/skills/{category}/{skill-name}/
+├── SKILL.md          # 核心文档（必需）
+├── scripts/          # 可选的辅助脚本
+└── examples/         # 可选的示例文件
+三类 Skill 目录
+/mnt/skills/public/ - Anthropic 官方提供的公共技能
+/mnt/skills/private/ - 用户私有技能
+/mnt/skills/examples/ - 示例技能（如 skill-creator）
+SKILL.md 的作用
+包含该领域的最佳实践和操作指南
+Claude 在执行相关任务前会先读取这个文件
+相当于给 Claude 提供"专家级指导手册"
+工作流程
+python
+# 当用户请求创建 PPT 时
+1. Claude 识别需要 pptx skill
+2. 调用 view("/mnt/skills/public/pptx/SKILL.md")
+3. 学习最佳实践
+4. 执行任务（可能调用 scripts/）
+```
+
+### Skill Creator 功能
+
+系统提示中提到了 `skill-creator` 这个**元技能**，它的作用是：
+- 指导用户创建新的自定义 skill
+- 提供创建 SKILL.md 的模板和规范
+- 帮助集成专业知识、工作流或工具
+
+## 对你的意义（作为 Proxy/Storage/Upgrade Safety Specialist）
+
+你可以创建一个 **Web3 Security Audit Skill**：
+```
+/mnt/skills/user/web3-security-audit/
+├── SKILL.md          # 代理安全审计的最佳实践
+├── scripts/
+│   ├── storage_slot_analyzer.py
+│   ├── upgrade_safety_checker.py
+│   └── common_vulnerabilities.json
+└── examples/
+    ├── proxy_audit_report_template.md
+    └── storage_collision_cases/
+这样每次你让 Claude 帮你做审计时，它会先读取你的专业知识库！
+
+你想要我帮你创建一个 Web3 安全审计的 skill 吗？
+
+如何使用 DeepSeek API 做一个机器人，他是 claude code 或 codex 的功能子集：它能实现标准 agent skills 的所有功能，但它不局限于某个项目文件夹 ，它是全局的。先不要写代码，我们先讨论方案和设计
+
+2月1日
+好的，让我们先理清思路，设计一个基于 DeepSeek API 的全局 Agent 系统。
+
+核心概念对比
+Claude Code / Codex
+范围限制：基于项目文件夹
+技能系统：预定义的 SKILL.md + 脚本
+工具调用：bash, file operations, web search 等
+上下文：项目级别
+你的目标系统
+全局范围：不限于单个项目
+技能标准：复用 Claude 的 Skill 格式（SKILL.md + scripts）
+功能子集：保留核心能力，去掉非必要功能
+设计方案讨论
+1. 系统架构层次
+┌─────────────────────────────────────────┐
+│  用户交互层 (CLI/API)                    │
+├─────────────────────────────────────────┤
+│  Agent 核心引擎 (DeepSeek R1)            │
+│  - 意图识别                              │
+│  - 技能匹配                              │
+│  - 工具编排                              │
+├─────────────────────────────────────────┤
+│  技能管理器                              │
+│  - Skill 加载/解析                       │
+│  - 技能索引                              │
+│  - 上下文注入                            │
+├─────────────────────────────────────────┤
+│  工具执行层                              │
+│  - bash 执行                             │
+│  - 文件操作（全局）                      │
+│  - Python/Node 脚本运行                  │
+│  - Git 操作                              │
+│  - Web 操作（可选）                      │
+├─────────────────────────────────────────┤
+│  安全沙箱层                              │
+│  - 权限控制                              │
+│  - 路径验证                              │
+│  - 命令白名单                            │
+└─────────────────────────────────────────┘
+2. 核心问题需要决策
+Q1: 技能存储位置
+选项 A: 全局统一目录
+
+~/.deepseek-agent/skills/
+├── public/          # 内置技能
+├── user/            # 用户自定义
+└── downloaded/      # 从社区下载
+选项 B: XDG 标准路径
+
+~/.config/deepseek-agent/skills/
+~/.local/share/deepseek-agent/skills/
+你的偏好？
+
+Q2: 全局性如何实现？
+文件操作范围：是否允许访问整个文件系统？需要哪些安全限制？
+上下文管理：如何跟踪跨目录的操作历史？
+工作目录概念：是否需要"当前工作上下文"的概念？
+Q3: 工具集合的边界
+从 Claude 的工具列表中，哪些是必需的？
+
+建议的最小工具集：
+
+python
+essential_tools = {
+    "bash_tool": "执行 shell 命令",
+    "str_replace": "编辑文件",
+    "view": "查看文件/目录",
+    "create_file": "创建文件",
+    "skill_loader": "加载技能定义",  # 新增
+}
+
+optional_tools = {
+    "web_search": "搜索信息",
+    "git_operations": "版本控制",
+    "package_manager": "安装依赖",
+}
+Q4: Skill 标准的扩展
+Claude 的 SKILL.md 是为 Claude 设计的，DeepSeek 需要适配：
+
+markdown
+# SKILL.md 标准扩展
+
+## 元信息
+- skill_id: web3-security-audit
+- version: 1.0.0
+- compatible_models: ["deepseek-r1", "deepseek-v3"]
+- required_tools: ["bash_tool", "view", "create_file"]
+
+## 提示词模板
+[用于注入到 DeepSeek system prompt 的内容]
+
+## 脚本清单
+- scripts/analyzer.py: 分析工具
+- scripts/checker.sh: 检查脚本
+
+## 依赖项
+- python_packages: ["web3", "eth-abi"]
+- system_packages: ["foundry"]
+```
+
+### 3. 工作流设计
+```
+用户输入: "帮我审计这个代理合约的存储槽冲突"
+    ↓
+意图识别: 需要 web3-security-audit skill
+    ↓
+加载 Skill: 读取 SKILL.md + 注入上下文
+    ↓
+DeepSeek 推理: 
+  - 理解任务
+  - 规划步骤
+  - 选择工具
+    ↓
+工具调用序列:
+  1. view("/path/to/contract.sol")
+  2. bash_tool("python scripts/storage_analyzer.py")
+  3. create_file("audit_report.md", content)
+    ↓
+返回结果
+4. 关键技术选择
+DeepSeek 模型选择
+DeepSeek-R1: 推理能力强，适合复杂任务规划
+DeepSeek-V3: 平衡性能和成本
+Function Calling 实现
+DeepSeek 支持 OpenAI 兼容的 function calling：
+
+python
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "bash_tool",
+            "description": "Execute shell command",
+            "parameters": {...}
+        }
+    }
+]
+状态管理
+会话级别：当前任务的临时上下文
+全局级别：技能缓存、配置、历史记录
+是否需要持久化对话历史？
+5. 安全考虑
+由于是全局访问，安全至关重要：
+
+python
+safety_rules = {
+    "path_whitelist": ["~/", "/tmp/"],  # 允许的路径前缀
+    "path_blacklist": ["/etc/", "/sys/"],  # 禁止的路径
+    "command_filter": "危险命令拦截（rm -rf, dd 等）",
+    "confirmation_required": "删除、修改系统文件需确认",
+    "dry_run_mode": "预览模式，不实际执行",
+}
+```
+
+### 6. 与你的 Web3 审计工作的结合
+
+可以预置一个 `web3-security-audit` skill：
+```
+~/.deepseek-agent/skills/user/web3-security-audit/
+├── SKILL.md  # 你的审计方法论
+├── scripts/
+│   ├── eip1967_inspector.py  # 你已有的工具
+│   ├── storage_layout_checker.py
+│   └── upgrade_safety_validator.py
+├── templates/
+│   └── audit_report.md
+└── knowledge/
+    └── common_vulnerabilities.json
+需要你反馈的问题
+功能优先级：哪些是 MVP 必需的？哪些可以后续迭代？
+交互方式：CLI？还是需要 GUI？或者两者都有？
+技能获取：是否需要一个"技能市场"让用户分享技能？
+成本控制：DeepSeek API 调用频率控制策略？
+你已有的工具：eip1967-proxy-storage-inspector 如何集成？作为第一个示例 skill？
+你觉得这个方向合理吗？有哪些地方需要调整？
+
+我暂时只想知道一个 mvp 的基本原理和数据流，比如“帮我 fork ETH mainnet 在高度 12345”
+
+2月1日
+好的，让我们聚焦 MVP 的核心数据流，用你的具体例子来说明。
+
+MVP 核心原理
+最小系统组成
+┌─────────────┐
+│  用户输入    │  "帮我 fork ETH mainnet 在高度 12345"
+└──────┬──────┘
+       ↓
+┌─────────────────────────────────────────┐
+│  DeepSeek Agent Core                     │
+│  ┌─────────────────────────────────┐    │
+│  │ System Prompt (动态构建)        │    │
+│  │ - 基础能力描述                   │    │
+│  │ - 已加载的 Skills 知识          │    │
+│  │ - 可用工具列表                   │    │
+│  └─────────────────────────────────┘    │
+└──────┬──────────────────────────────────┘
+       ↓
+┌─────────────────────────────────────────┐
+│  DeepSeek API Response                   │
+│  {                                        │
+│    "reasoning": "<think>需要...</think>", │
+│    "tool_calls": [...]                   │
+│  }                                        │
+└──────┬──────────────────────────────────┘
+       ↓
+┌─────────────────────────────────────────┐
+│  Tool Executor                           │
+│  - 执行工具调用                          │
+│  - 收集结果                              │
+└──────┬──────────────────────────────────┘
+       ↓
+┌─────────────┐
+│  返回用户    │
+└─────────────┘
+详细数据流（以 fork ETH 为例）
+Step 1: 用户输入 → Skill 匹配
+python
+user_input = "帮我 fork ETH mainnet 在高度 12345"
+
+# Agent 扫描已加载的 skills
+available_skills = load_skills_index()
+# {
+#   "web3-dev": {
+#     "keywords": ["fork", "mainnet", "anvil", "foundry"],
+#     "path": "~/.deepseek-agent/skills/user/web3-dev/"
+#   }
+# }
+
+matched_skill = match_skill(user_input, available_skills)
+# → "web3-dev"
+Step 2: 动态构建 System Prompt
+python
+# 读取 Skill 定义
+skill_content = read_file("~/.deepseek-agent/skills/user/web3-dev/SKILL.md")
+
+# 构建最终的 system prompt
+system_prompt = f"""
+你是一个全局代码助手，可以执行系统命令和文件操作。
+
+## 可用工具
+{format_tools_description(AVAILABLE_TOOLS)}
+
+## 当前激活的专业知识: Web3 开发
+
+{skill_content}
+
+## 安全规则
+- 所有操作需要明确用户意图
+- 危险命令需要用户确认
+"""
+关键点：SKILL.md 的内容会被直接注入到 system prompt 中
+
+Step 3: 发送到 DeepSeek API
+python
+messages = [
+    {
+        "role": "system",
+        "content": system_prompt
+    },
+    {
+        "role": "user", 
+        "content": "帮我 fork ETH mainnet 在高度 12345"
+    }
+]
+
+response = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",  # 或 deepseek-chat
+    messages=messages,
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "bash_tool",
+                "description": "Execute bash command",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "description": {"type": "string"}
+                    },
+                    "required": ["command"]
+                }
+            }
+        },
+        # ... 其他工具
+    ]
+)
+Step 4: DeepSeek 推理 + 工具调用
+DeepSeek 的响应可能是这样的：
+
+json
+{
+  "choices": [{
+    "message": {
+      "role": "assistant",
+      "content": null,
+      "reasoning_content": "<think>用户想要 fork 以太坊主网到本地。这需要使用 Foundry 的 anvil 命令，并指定 fork URL 和区块高度。我需要：\n1. 检查 anvil 是否安装\n2. 构建正确的命令\n3. 执行命令</think>",
+      "tool_calls": [
+        {
+          "id": "call_1",
+          "type": "function",
+          "function": {
+            "name": "bash_tool",
+            "arguments": "{\"command\": \"which anvil\", \"description\": \"检查 anvil 是否安装\"}"
+          }
+        }
+      ]
+    }
+  }]
+}
+Step 5: 工具执行
+python
+# 执行工具调用
+tool_result = execute_tool(
+    name="bash_tool",
+    args={"command": "which anvil"}
+)
+# → "/Users/jaxk/.foundry/bin/anvil"
+
+# 将结果添加到对话历史
+messages.append({
+    "role": "assistant",
+    "tool_calls": response.choices[0].message.tool_calls
+})
+messages.append({
+    "role": "tool",
+    "tool_call_id": "call_1",
+    "content": "/Users/jaxk/.foundry/bin/anvil"
+})
+
+# 继续对话，让 DeepSeek 基于工具结果继续推理
+response2 = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",
+    messages=messages,
+    tools=tools
+)
+Step 6: 第二轮工具调用
+DeepSeek 看到 anvil 已安装，继续执行：
+
+json
+{
+  "tool_calls": [
+    {
+      "function": {
+        "name": "bash_tool",
+        "arguments": "{\"command\": \"anvil --fork-url https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY --fork-block-number 12345\", \"description\": \"启动 fork 节点\"}"
+      }
+    }
+  ]
+}
+```
+
+### Step 7: 完整数据流图
+```
+用户输入: "帮我 fork ETH mainnet 在高度 12345"
+    ↓
+┌──────────────────────────────┐
+│ Skill Matcher                │
+│ 关键词匹配 → web3-dev skill  │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ Load SKILL.md                │
+│ 读取: foundry 使用指南       │
+│      anvil fork 命令示例     │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ Build System Prompt          │
+│ = 基础能力 + Skill 知识      │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ DeepSeek API Call #1         │
+│ → reasoning: 需要检查 anvil  │
+│ → tool_call: which anvil     │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ Execute Tool                 │
+│ bash("which anvil")          │
+│ → /path/to/anvil             │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ DeepSeek API Call #2         │
+│ (with tool result)           │
+│ → tool_call: anvil --fork... │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ Execute Tool                 │
+│ bash("anvil --fork-url...")  │
+│ → 进程启动，输出日志          │
+└────────┬─────────────────────┘
+         ↓
+┌──────────────────────────────┐
+│ Format Output                │
+│ "✓ 已启动 fork 节点于..."    │
+└──────────────────────────────┘
+核心数据结构
+1. Skill 定义（SKILL.md 示例）
+markdown
+# Web3 Development Skill
+
+## 简介
+这个 skill 提供 Web3 开发的常用操作。
+
+## Foundry 工具使用
+
+### Fork 主网
+使用 anvil 可以 fork 任何 EVM 链：
+```bash
+anvil --fork-url  --fork-block-number 
+```
+
+常用 RPC 端点：
+- ETH Mainnet: https://eth-mainnet.g.alchemy.com/v2/
+- Polygon: https://polygon-mainnet.g.alchemy.com/v2/
+
+### 常见参数
+- `--port`: 指定端口（默认 8545）
+- `--chain-id`: 链 ID
+- `--accounts`: 账户数量
+关键：这些知识会被注入到 DeepSeek 的上下文中！
+
+2. 工具定义
+python
+TOOLS = {
+    "bash_tool": {
+        "type": "function",
+        "function": {
+            "name": "bash_tool",
+            "description": "在系统中执行 bash 命令。可以运行任何 shell 命令。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "要执行的 bash 命令"
+                    },
+                    "description": {
+                        "type": "string", 
+                        "description": "说明为什么执行这个命令"
+                    }
+                },
+                "required": ["command"]
+            }
+        }
+    }
+}
+3. 会话状态
+python
+session_state = {
+    "messages": [],           # 对话历史
+    "active_skills": ["web3-dev"],  # 当前激活的 skills
+    "working_dir": os.getcwd(),     # 当前工作目录
+    "background_processes": [],      # 后台进程（如 anvil）
+}
+MVP 的最小实现
+只需要这几个核心组件：
+
+Skill Loader: 读取 SKILL.md
+Prompt Builder: 拼接 system prompt
+DeepSeek Client: 调用 API
+Tool Executor: 执行 bash 命令
+Loop Controller: 多轮对话循环
+核心逻辑就 100 行左右：
+
+python
+def agent_loop(user_input):
+    # 1. 匹配 skill
+    skill = match_skill(user_input)
+    
+    # 2. 构建 prompt
+    system_prompt = build_prompt(skill)
+    
+    # 3. 初始化消息
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_input}
+    ]
+    
+    # 4. 循环直到完成
+    while True:
+        response = call_deepseek(messages, tools)
+        
+        if no tool_calls:
+            return response.content  # 完成
+        
+        # 5. 执行工具
+        for tool_call in response.tool_calls:
+            result = execute_tool(tool_call)
+            messages.append(tool_result_message)
+关键问题
+Q: Skill 如何影响 Agent 行为？
+A: 通过注入专业知识到 system prompt，让 DeepSeek "知道" Foundry/anvil 的使用方法
+
+Q: 为什么不直接写死命令模板？
+A: DeepSeek 的推理能力可以处理变化（比如用户说 "fork 最新区块" 或 "fork BSC"），比模板灵活
+
+Q: 工具执行的安全性？
+A: MVP 可以先加个确认机制，生产环境需要沙箱
+
+这个流程清晰吗？需要我深入讲解哪个环节？
+
+我可能缺乏下面的知识response = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",  # 或 deepseek-chat
+    messages=messages,
+    tools=[
+        {
+            "type": "function",
+            "function": {
+                "name": "bash_tool",
+                "description": "Execute bash command",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command": {"type": "string"},
+                        "description": {"type": "string"}
+                    },
+                    "required": ["command"]
+                }
+            }
+        },  我怎么知道应该是bash tool ，万一某个skill是node.js 呢
+
+Show more
+2月1日
+非常好的问题！这正是设计的关键点。
+
+问题本质
+你的困惑在于：谁来决定需要哪些 tools？
+
+有两种设计思路：
+
+方案 A：静态工具集（简单但不灵活）
+python
+# 所有 skills 共享同一套工具
+GLOBAL_TOOLS = [
+    bash_tool,
+    create_file_tool,
+    view_file_tool,
+    str_replace_tool,
+]
+
+# 每次调用都传递全部工具
+response = deepseek_client.chat.completions.create(
+    tools=GLOBAL_TOOLS  # 固定的
+)
+问题：
+
+如果某个 skill 需要特殊工具（比如 solidity_compiler_tool），怎么办？
+工具太多会浪费 token
+方案 B：Skill 声明依赖工具（推荐）⭐
+核心思想
+让 SKILL.md 声明它需要哪些工具
+
+SKILL.md 格式扩展
+markdown
+# Web3 Development Skill
+
+## 元信息
+```yaml
+skill_id: web3-dev
+version: 1.0.0
+required_tools:
+  - bash_tool
+  - create_file_tool
+  - view_file_tool
+optional_tools:
+  - nodejs_tool  # 如果存在就用，不存在也能工作
+  - python_tool
+custom_tools:
+  - name: solidity_compiler
+    type: function
+    function:
+      name: compile_solidity
+      description: Compile Solidity contracts using solc
+      parameters:
+        type: object
+        properties:
+          contract_path:
+            type: string
+        required: [contract_path]
+```
+
+## 知识内容
+...
+数据流变化
+python
+# Step 1: 加载 skill
+skill = load_skill("web3-dev")
+# skill.required_tools = ["bash_tool", "create_file_tool", "view_file_tool"]
+# skill.custom_tools = [solidity_compiler_tool_definition]
+
+# Step 2: 组装工具列表
+tools = []
+for tool_name in skill.required_tools:
+    tools.append(BUILTIN_TOOLS[tool_name])  # 从内置工具库获取
+
+for custom_tool in skill.custom_tools:
+    tools.append(custom_tool)  # 添加自定义工具
+
+# Step 3: 调用 API
+response = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",
+    messages=messages,
+    tools=tools  # 动态组装的工具列表
+)
+实际例子对比
+例子 1：纯 Bash 的 Skill
+yaml
+# ~/.deepseek-agent/skills/user/system-admin/SKILL.md
+skill_id: system-admin
+required_tools:
+  - bash_tool
+  - view_file_tool
+→ 只传递 2 个工具到 DeepSeek
+
+例子 2：Node.js 开发 Skill
+yaml
+# ~/.deepseek-agent/skills/user/nodejs-dev/SKILL.md
+skill_id: nodejs-dev
+required_tools:
+  - bash_tool
+  - create_file_tool
+  - str_replace_tool
+custom_tools:
+  - name: npm_tool
+    type: function
+    function:
+      name: run_npm_command
+      description: Execute npm commands (install, run, etc)
+      parameters:
+        type: object
+        properties:
+          command: 
+            type: string
+            enum: [install, run, test, build]
+          args:
+            type: string
+→ 传递 3 个内置工具 + 1 个自定义 npm_tool
+
+例子 3：你的 Web3 审计 Skill
+yaml
+# ~/.deepseek-agent/skills/user/web3-security-audit/SKILL.md
+skill_id: web3-security-audit
+required_tools:
+  - bash_tool
+  - view_file_tool
+  - create_file_tool
+custom_tools:
+  - name: foundry_tool
+    type: function
+    function:
+      name: run_foundry_command
+      description: Execute Foundry commands (forge, cast, anvil)
+      parameters:
+        type: object
+        properties:
+          tool:
+            type: string
+            enum: [forge, cast, anvil, chisel]
+          command:
+            type: string
+  
+  - name: storage_analyzer
+    type: function
+    function:
+      name: analyze_storage_layout
+      description: Analyze proxy storage layout using eip1967-inspector
+      parameters:
+        type: object
+        properties:
+          contract_address:
+            type: string
+          rpc_url:
+            type: string
+工具库的组织结构
+python
+# tools/builtin.py
+BUILTIN_TOOLS = {
+    "bash_tool": {
+        "type": "function",
+        "function": {
+            "name": "bash_tool",
+            "description": "Execute bash commands",
+            "parameters": {...}
+        }
+    },
+    
+    "nodejs_tool": {
+        "type": "function", 
+        "function": {
+            "name": "run_node_script",
+            "description": "Execute Node.js scripts",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "script": {"type": "string"},
+                    "args": {"type": "array"}
+                }
+            }
+        }
+    },
+    
+    "python_tool": {
+        "type": "function",
+        "function": {
+            "name": "run_python_script",
+            "description": "Execute Python scripts",
+            "parameters": {...}
+        }
+    },
+    
+    # ... 更多内置工具
+}
+
+# tools/executor.py
+def execute_tool(tool_name, arguments):
+    """统一的工具执行入口"""
+    if tool_name == "bash_tool":
+        return execute_bash(arguments["command"])
+    
+    elif tool_name == "run_node_script":
+        return execute_nodejs(arguments["script"], arguments.get("args", []))
+    
+    elif tool_name == "run_python_script":
+        return execute_python(arguments["script"], arguments.get("args", []))
+    
+    elif tool_name == "analyze_storage_layout":
+        # 调用你的 eip1967-inspector
+        return run_storage_inspector(arguments["contract_address"], arguments["rpc_url"])
+    
+    else:
+        raise UnknownToolError(tool_name)
+```
+
+---
+
+## 完整流程示例
+
+### 用户请求
+```
+"帮我用 eip1967-inspector 检查这个代理合约的存储槽"
+Step 1: 匹配 Skill
+python
+matched_skill = "web3-security-audit"
+Step 2: 加载 Skill 和工具
+python
+skill = load_skill("web3-security-audit")
+
+# 从 SKILL.md 中解析出：
+skill.required_tools = ["bash_tool", "view_file_tool", "create_file_tool"]
+skill.custom_tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_storage_layout",
+            ...
+        }
+    }
+]
+
+# 组装工具列表
+tools = []
+for name in skill.required_tools:
+    tools.append(BUILTIN_TOOLS[name])
+tools.extend(skill.custom_tools)
+
+# 现在 tools = [bash_tool, view_file_tool, create_file_tool, analyze_storage_layout]
+Step 3: DeepSeek 看到的工具列表
+json
+[
+  {
+    "type": "function",
+    "function": {
+      "name": "bash_tool",
+      "description": "Execute bash commands"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "view_file_tool",
+      "description": "View file contents"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "create_file_tool",
+      "description": "Create new files"
+    }
+  },
+  {
+    "type": "function",
+    "function": {
+      "name": "analyze_storage_layout",  // 自定义工具！
+      "description": "Analyze proxy storage layout using eip1967-inspector",
+      "parameters": {
+        "contract_address": "...",
+        "rpc_url": "..."
+      }
+    }
+  }
+]
+Step 4: DeepSeek 选择工具
+json
+{
+  "reasoning_content": "<think>用户想检查代理合约存储槽，我看到有一个专门的工具 analyze_storage_layout，应该直接用它</think>",
+  "tool_calls": [
+    {
+      "function": {
+        "name": "analyze_storage_layout",
+        "arguments": "{\"contract_address\": \"0x...\", \"rpc_url\": \"https://eth-mainnet...\"}"
+      }
+    }
+  ]
+}
+关键设计决策
+Q1: 内置工具 vs 自定义工具的边界？
+内置工具（通用的）：
+
+bash_tool - 执行任何命令
+python_tool - 运行 Python 脚本
+nodejs_tool - 运行 Node.js 脚本
+create_file_tool - 创建文件
+view_file_tool - 查看文件
+自定义工具（特定领域的）：
+
+analyze_storage_layout - Web3 专用
+compile_solidity - Solidity 专用
+run_foundry_command - Foundry 专用
+Q2: 为什么不直接用 bash_tool 调用所有命令？
+可以！但专用工具有优势：
+
+python
+# 方案 A: 纯 bash
+tool_call = {
+    "name": "bash_tool",
+    "arguments": {
+        "command": "cd /path && python3 eip1967_inspector.py --address 0x... --rpc https://..."
+    }
+}
+
+# 方案 B: 专用工具
+tool_call = {
+    "name": "analyze_storage_layout",
+    "arguments": {
+        "contract_address": "0x...",
+        "rpc_url": "https://..."
+    }
+}
+专用工具的好处：
+
+类型安全：参数有明确的类型定义
+更好的错误处理：可以做参数验证
+更清晰的意图：DeepSeek 更容易理解该用哪个工具
+可以包装复杂逻辑：比如自动找到 inspector 脚本路径
+MVP 建议
+第一阶段：只用内置工具
+
+yaml
+# 所有 skills 都用这 4 个工具
+required_tools:
+  - bash_tool
+  - create_file_tool
+  - view_file_tool
+  - str_replace_tool
+第二阶段：添加自定义工具
+
+yaml
+# 为 web3-security-audit 添加专用工具
+custom_tools:
+  - analyze_storage_layout
+  - run_foundry_command
+这样回答了你的问题吗？还是需要我展示具体的代码实现？
+
+关于 Skill 声明依赖工具，着不是我们决定的 我们需要依据 skill 规范
+
+2月1日
+你说得对！我刚才的设计是我自己臆想的，不是基于标准。
+
+让我去查看 Claude 实际使用的 Skill 标准规范。
+
+从系统提示中我看到：
+
+<available_skills>
+<skill>
+<name>docx</name>
+<description>...</description>
+<location>/mnt/skills/public/docx/SKILL.md</location>
+</skill>
+...
+</available_skills>
+但这只是 skill 的索引信息，真正的规范在 SKILL.md 文件里。
+
+我需要查看实际的 SKILL.md 格式
+系统提示提到了一个关键的 skill：
+
+<skill>
+<name>skill-creator</name>
+<description>Guide for creating effective skills...</description>
+<location>/mnt/skills/examples/skill-creator/SKILL.md</location>
+</skill>
+这个 skill-creator 应该包含了创建 skill 的标准规范！
+
+但我现在没法直接访问这个文件。让我尝试推理和搜索一下 Anthropic 的 skill 标准。
+
+问题澄清
+你是想：
+
+选项 A：完全遵循 Claude 的 Skill 标准
+需要找到 Anthropic 公开的 Skill 规范文档
+或者反向工程 Claude 的 SKILL.md 格式
+确保兼容性
+选项 B：参考 Claude，但定义自己的标准
+借鉴 Claude 的设计思路
+但针对 DeepSeek 做适配
+可能需要扩展或简化
+选项 C：使用其他已有的 Agent Skill 标准
+比如 LangChain 的 Tools
+比如 OpenAI 的 Assistants API
+比如 AutoGPT 的 plugins
+我的建议
+让我先搜索一下是否有公开的 Anthropic Skill 标准文档，然后我们基于实际标准来设计。
+
+或者，你能否：
+
+在 Claude.ai 中问 Claude："skill-creator 的 SKILL.md 内容是什么？"
+或者问："创建一个新 skill 的标准格式是什么？"
+这样我们就能看到真正的规范，而不是我瞎猜。
+
+你觉得呢？
+
+Anthropic 公开的 Skill 规范文档  在这里 https://agentskills.io/specification
+
+2月1日
+完美！让我查看这个官方规范。
+
+
+favicon
+Fetched
+Specification - Agent Skills
+agentskills.io
+
+太好了！现在我看到了官方的 Agent Skills 规范。让我总结关键点：
+
+Agent Skills 官方规范总结
+1. 目录结构
+skill-name/
+├── SKILL.md          # 必需
+├── scripts/          # 可选：可执行脚本
+├── references/       # 可选：详细文档
+└── assets/           # 可选：静态资源
+2. SKILL.md 格式
+Frontmatter（YAML，必需）
+yaml
+---
+name: skill-name              # 必需，1-64字符，小写+连字符
+description: |                # 必需，1-1024字符
+  描述这个skill做什么以及何时使用它
+license: Apache-2.0           # 可选
+compatibility: |              # 可选，环境要求
+  Designed for Claude Code
+metadata:                     # 可选，自定义元数据
+  author: example-org
+  version: "1.0"
+allowed-tools: Bash(git:*) Read  # 可选，预批准的工具（实验性）⭐
+---
+Body（Markdown）
+没有格式限制
+建议包含：步骤说明、示例、边界情况
+建议 < 500 行（< 5000 tokens）
+3. 关键发现：allowed-tools 字段！⭐
+yaml
+allowed-tools: Bash(git:*) Bash(jq:*) Read
+这就是你问的答案！
+
+规范提供了一个可选的方式来声明 skill 可以使用的工具：
+
+空格分隔的工具列表
+可以包含参数过滤（如 Bash(git:*)）
+实验性特性，不同 agent 实现可能有不同支持
+回答你的原始问题
+"我怎么知道应该是 bash_tool，万一某个 skill 是 node.js 呢？"
+根据官方规范，有两种方式：
+
+方式 1：使用 allowed-tools 字段（实验性）
+yaml
+---
+name: web3-security-audit
+description: Audit smart contract storage layouts and upgrade safety
+allowed-tools: Bash(foundry:*) Bash(python3:*) Read Create
+---
+你的 agent 在加载 skill 时：
+
+python
+skill = load_skill("web3-security-audit")
+allowed_tools = skill.frontmatter.get("allowed-tools", "")
+# → "Bash(foundry:*) Bash(python3:*) Read Create"
+
+# 解析并构建工具列表
+tools = parse_allowed_tools(allowed_tools)
+方式 2：从 Body 内容推断（智能方式）
+规范说明 Body 可以包含任何内容，包括：
+
+markdown
+# Web3 Security Audit Skill
+
+## Required Tools
+This skill requires:
+- Bash (for running foundry commands)
+- Python (for running analysis scripts)
+- File operations (Read, Create)
+
+## Setup
+Ensure you have installed:
+- Foundry (forge, cast, anvil)
+- Python 3.x with web3.py
+你的 agent 读取这些内容后，可以：
+
+自动识别需要的工具
+或者简单地提供所有基础工具，让 DeepSeek 自己选择
+对你的 MVP 设计的影响
+最简单的实现（推荐用于 MVP）
+不用纠结工具声明，直接提供全套基础工具：
+
+python
+# 所有 skills 共享的基础工具集
+BASE_TOOLS = [
+    bash_tool,      # 可以运行任何命令（包括 node, python, foundry）
+    create_file,
+    view_file,
+    str_replace,
+]
+
+# 调用时始终传递这些工具
+response = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",
+    messages=messages,
+    tools=BASE_TOOLS  # 固定的基础工具集
+)
+为什么这样可行？
+
+bash_tool 可以执行 node script.js、python3 analyze.py、forge test
+DeepSeek 会从 SKILL.md 的说明中学习该用什么命令
+简单、灵活、符合规范
+进阶实现（如果需要更精细控制）
+python
+def load_skill_tools(skill):
+    """根据 skill 的 allowed-tools 字段解析工具"""
+    allowed = skill.frontmatter.get("allowed-tools", "")
+    
+    if not allowed:
+        # 没有声明，使用全套基础工具
+        return BASE_TOOLS
+    
+    # 解析 allowed-tools
+    # "Bash(git:*) Bash(jq:*) Read" → ["bash_tool", "view_file"]
+    tools = parse_allowed_tools_spec(allowed)
+    return tools
+实际例子
+Web3 Audit Skill
+yaml
+---
+name: web3-security-audit
+description: |
+  Audit Ethereum smart contracts for storage layout conflicts, 
+  upgrade safety issues, and proxy implementation bugs. Use when 
+  analyzing proxy contracts, upgradeable patterns, or EIP-1967 storage.
+allowed-tools: Bash(foundry:*) Bash(python3:*) Read Create
+metadata:
+  author: jaxk
+  version: "1.0.0"
+  requires: foundry, python3, web3.py
+---
+
+# Web3 Security Audit Skill
+
+## Overview
+This skill helps audit smart contracts using Foundry and custom analysis tools.
+
+## Tools Used
+- **Foundry**: For interacting with contracts (forge, cast, anvil)
+- **Python**: For running eip1967-proxy-storage-inspector
+- **File operations**: For reading contracts and creating reports
+
+## Workflow
+
+### 1. Analyze Storage Layout
+Use the eip1967-inspector to check proxy storage:
+```bash
+python3 scripts/eip1967_inspector.py \
+  --address 0x... \
+  --rpc https://eth-mainnet...
+```
+
+### 2. Check for Common Issues
+- Storage slot collisions
+- Uninitialized implementation
+- Missing gap variables
+...
+DeepSeek 如何使用
+python
+# 1. 加载 skill
+skill_md = load_skill("web3-security-audit")
+
+# 2. 构建 system prompt（把整个 SKILL.md 注入）
+system_prompt = f"""
+你是一个全局代码助手。
+
+当前激活的专业知识：
+{skill_md.content}
+
+可用工具：
+- bash_tool: 执行任何 shell 命令
+- view_file: 读取文件
+- create_file: 创建文件
+"""
+
+# 3. DeepSeek 看到 SKILL.md 后知道：
+#    - 需要用 foundry
+#    - 需要用 python3
+#    - scripts/eip1967_inspector.py 是关键工具
+#    所以它会调用：
+#    bash_tool("python3 scripts/eip1967_inspector.py ...")
+关键洞察
+根据官方规范，Agent Skills 的设计哲学是：
+
+Skill 是知识，不是代码
+SKILL.md 主要是指导 agent 如何做事
+脚本只是辅助工具
+工具声明是可选的
+allowed-tools 是实验性特性
+很多 skills 根本不声明工具
+Progressive Disclosure（渐进式披露）
+元数据：~100 tokens（总是加载）
+SKILL.md：< 5000 tokens（激活时加载）
+其他文件：按需加载
+灵活性优先
+Body 内容无格式限制
+不同 agent 可以有不同实现
+对你的 MVP 的建议
+最简化版本
+python
+# 1. 基础工具集（够用了）
+TOOLS = [bash_tool, view_file, create_file, str_replace]
+
+# 2. 加载 skill 时
+skill = load_skill_md(skill_name)
+
+# 3. 注入到 system prompt
+system_prompt = BASE_PROMPT + skill.content
+
+# 4. 调用 DeepSeek
+response = deepseek_client.chat.completions.create(
+    model="deepseek-reasoner",
+    messages=[
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_input}
+    ],
+    tools=TOOLS
+)
+不需要复杂的工具解析！ bash_tool 可以运行所有东西。
+
+如果想支持 allowed-tools（可选）
+python
+def parse_allowed_tools(allowed_tools_str):
+    """
+    "Bash(git:*) Read Create" → 
+    [bash_tool_with_filter, view_file, create_file]
+    """
+    # 留给后续实现
+    pass
+这样清晰了吗？
+
+所以我的 golang 代码应该如何写，请给出每个步骤模块名称功能输入输出 标注是利用 ai 还是利用逻辑代码，不要编写实际的代码
+
+2月1日
+好的，我给出完整的模块设计，不写具体代码。
+
+系统架构图
+┌─────────────────────────────────────────────────────────┐
+│                     CLI 入口                             │
+│  - 解析命令行参数                                         │
+│  - 初始化系统                                            │
+│  - 启动交互循环                                          │
+└────────────────┬────────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────────────┐
+│                 Agent Core (核心引擎)                    │
+│  - 协调各模块                                            │
+│  - 管理对话循环                                          │
+│  - 处理用户请求                                          │
+└─┬───────────┬──────────┬──────────────┬────────────────┘
+  ↓           ↓          ↓              ↓
+┌───────┐ ┌────────┐ ┌─────────┐ ┌──────────────┐
+│Skill  │ │Prompt  │ │DeepSeek │ │Tool Executor │
+│Manager│ │Builder │ │Client   │ │              │
+└───────┘ └────────┘ └─────────┘ └──────────────┘
+模块详细设计
+1. 项目结构
+deepseek-agent/
+├── cmd/
+│   └── agent/
+│       └── main.go                    # 入口
+├── internal/
+│   ├── agent/
+│   │   └── core.go                    # Agent 核心引擎
+│   ├── skill/
+│   │   ├── loader.go                  # Skill 加载器
+│   │   ├── matcher.go                 # Skill 匹配器
+│   │   └── types.go                   # Skill 数据结构
+│   ├── prompt/
+│   │   └── builder.go                 # System Prompt 构建器
+│   ├── deepseek/
+│   │   ├── client.go                  # DeepSeek API 客户端
+│   │   └── types.go                   # API 数据结构
+│   ├── tool/
+│   │   ├── executor.go                # 工具执行器
+│   │   ├── bash.go                    # Bash 工具实现
+│   │   ├── file.go                    # 文件操作工具
+│   │   └── registry.go                # 工具注册表
+│   └── config/
+│       └── config.go                  # 配置管理
+└── skills/                            # Skills 目录
+    ├── public/                        # 内置 skills
+    └── user/                          # 用户 skills
+核心模块设计
+Module 1: CLI 入口 (cmd/agent/main.go)
+功能: 程序入口，解析命令行参数，初始化系统
+
+实现方式: 逻辑代码
+
+输入:
+
+命令行参数:
+  - --config: 配置文件路径
+  - --skill-dir: skills 目录路径
+  - --interactive: 交互模式
+  - 用户输入文本（非交互模式）
+输出:
+
+启动系统或退出
+流程:
+
+解析命令行参数
+加载配置文件
+初始化 AgentCore
+启动交互循环或处理单次请求
+Module 2: Agent Core (internal/agent/core.go)
+功能: 核心引擎，协调所有模块，管理对话循环
+
+实现方式: 逻辑代码
+
+主要结构:
+
+go
+type AgentCore struct {
+    Config        *config.Config
+    SkillManager  *skill.Manager
+    PromptBuilder *prompt.Builder
+    DeepSeekClient *deepseek.Client
+    ToolExecutor  *tool.Executor
+    SessionState  *SessionState
+}
+```
+
+**关键方法**:
+
+#### 2.1 Initialize()
+**输入**: Config
+**输出**: error
+**逻辑**:
+- 初始化所有子模块
+- 加载所有 skills
+- 注册所有 tools
+
+#### 2.2 ProcessUserInput()
+**输入**: 
+```
+userInput string
+```
+**输出**: 
+```
+response string
+error
+```
+**流程**:
+1. 调用 SkillMatcher.MatchSkills(userInput)
+2. 调用 PromptBuilder.BuildSystemPrompt(matchedSkills)
+3. 调用 DeepSeekClient.Chat(messages, tools)
+4. 进入工具调用循环
+5. 返回最终响应
+
+#### 2.3 ToolCallLoop()
+**输入**:
+```
+messages []Message
+tools []Tool
+```
+**输出**:
+```
+finalResponse string
+error
+流程:
+
+调用 DeepSeek API
+如果有 tool_calls → 执行工具 → 添加结果到 messages → 循环
+如果没有 tool_calls → 返回 content
+Module 3: Skill Manager (internal/skill/)
+3.1 Skill Loader (loader.go)
+功能: 加载和解析 SKILL.md 文件
+
+实现方式: 逻辑代码
+
+数据结构:
+
+go
+type Skill struct {
+    Name          string
+    Description   string
+    License       string
+    Compatibility string
+    Metadata      map[string]string
+    AllowedTools  string
+    BodyContent   string  // Markdown body
+    ScriptsPath   string  // scripts/ 目录路径
+    ReferencesPath string
+    AssetsPath    string
+}
+```
+
+**方法: LoadSkill()**
+**输入**:
+```
+skillPath string  // e.g., "~/.deepseek-agent/skills/user/web3-security-audit"
+```
+**输出**:
+```
+*Skill
+error
+```
+**流程**:
+1. 读取 SKILL.md 文件
+2. 解析 YAML frontmatter (使用 gopkg.in/yaml.v3)
+3. 提取 Markdown body
+4. 检查可选目录 (scripts/, references/, assets/)
+5. 返回 Skill 对象
+
+**方法: LoadAllSkills()**
+**输入**:
+```
+skillsDir string  // e.g., "~/.deepseek-agent/skills"
+```
+**输出**:
+```
+[]Skill
+error
+```
+**流程**:
+1. 遍历 public/ 和 user/ 目录
+2. 对每个子目录调用 LoadSkill()
+3. 构建技能索引
+
+#### 3.2 Skill Matcher (matcher.go)
+
+**功能**: 根据用户输入匹配相关 skills
+
+**实现方式**: 逻辑代码 (简单版) 或 AI (高级版)
+
+**方法: MatchSkills()**
+**输入**:
+```
+userInput string
+availableSkills []Skill
+```
+**输出**:
+```
+matchedSkills []Skill
+```
+
+**实现选项**:
+
+**选项 A: 关键词匹配（逻辑代码，MVP 推荐）**
+```
+流程:
+1. 提取 userInput 中的关键词
+2. 与每个 skill.Description 做相似度匹配
+3. 返回匹配分数最高的 skills
+```
+
+**选项 B: AI 匹配（使用 DeepSeek）**
+```
+流程:
+1. 构建 prompt: "用户说: '{userInput}', 以下哪些 skills 相关: {skill_list}"
+2. 调用 DeepSeek 返回 skill 名称列表
+3. 返回匹配的 skills
+```
+
+---
+
+### Module 4: Prompt Builder (internal/prompt/builder.go)
+
+**功能**: 构建 System Prompt
+
+**实现方式**: 逻辑代码
+
+**方法: BuildSystemPrompt()**
+**输入**:
+```
+basePrompt string       // 基础能力描述
+activeSkills []Skill    // 当前激活的 skills
+toolDefinitions []Tool  // 可用工具列表
+```
+**输出**:
+```
+systemPrompt string
+```
+**流程**:
+1. 拼接基础 prompt
+2. 添加工具列表描述
+3. 注入激活的 skills 的 BodyContent
+4. 添加安全规则
+5. 返回完整 prompt
+
+**示例输出**:
+```
+你是一个全局代码助手，可以执行系统命令和文件操作。
+
+## 可用工具
+- bash_tool: 执行 bash 命令
+- view_file: 查看文件内容
+- create_file: 创建新文件
+- str_replace: 编辑文件
+
+## 当前激活的专业知识
+
+### Web3 Security Audit
+{web3-security-audit skill 的完整 Markdown body}
+
+## 安全规则
+- 危险命令需要用户确认
+- 不得删除系统文件
+...
+Module 5: DeepSeek Client (internal/deepseek/)
+功能: 与 DeepSeek API 交互
+
+实现方式: 逻辑代码（调用 HTTP API）
+
+5.1 数据结构 (types.go)
+go
+type Message struct {
+    Role    string      // "system", "user", "assistant", "tool"
+    Content string      
+    ToolCalls []ToolCall  // tool_calls 字段
+    ToolCallID string     // 仅 role=tool 时使用
+}
+
+type ToolCall struct {
+    ID       string
+    Type     string  // "function"
+    Function FunctionCall
+}
+
+type FunctionCall struct {
+    Name      string
+    Arguments string  // JSON string
+}
+
+type Tool struct {
+    Type     string  // "function"
+    Function ToolFunction
+}
+
+type ToolFunction struct {
+    Name        string
+    Description string
+    Parameters  interface{}  // JSON schema
+}
+
+type ChatRequest struct {
+    Model    string
+    Messages []Message
+    Tools    []Tool
+}
+
+type ChatResponse struct {
+    Choices []Choice
+}
+
+type Choice struct {
+    Message Message
+}
+```
+
+#### 5.2 Client (client.go)
+
+**方法: Chat()**
+**输入**:
+```
+request ChatRequest
+```
+**输出**:
+```
+*ChatResponse
+error
+流程:
+
+序列化 request 为 JSON
+发送 HTTP POST 到 DeepSeek API
+解析响应
+处理错误（重试、限流等）
+返回 response
+Module 6: Tool Executor (internal/tool/)
+功能: 执行工具调用
+
+实现方式: 逻辑代码
+
+6.1 Tool Registry (registry.go)
+功能: 注册和管理所有工具
+
+数据结构:
+
+go
+type ToolRegistry struct {
+    tools map[string]ToolHandler
+}
+
+type ToolHandler func(args map[string]interface{}) (string, error)
+```
+
+**方法: Register()**
+**输入**:
+```
+name string
+handler ToolHandler
+definition Tool
+```
+**输出**:
+```
+error
+```
+
+**方法: GetToolDefinitions()**
+**输入**: 无
+**输出**:
+```
+[]Tool  // 返回所有工具的 OpenAI 格式定义
+```
+
+#### 6.2 Tool Executor (executor.go)
+
+**方法: Execute()**
+**输入**:
+```
+toolCall ToolCall
+```
+**输出**:
+```
+result string
+error
+```
+**流程**:
+1. 从 toolCall.Function.Name 找到对应的 handler
+2. 解析 toolCall.Function.Arguments (JSON → map)
+3. 调用 handler(args)
+4. 返回结果或错误
+
+#### 6.3 Bash Tool (bash.go)
+
+**功能**: 执行 bash 命令
+
+**实现方式**: 逻辑代码（调用 os/exec）
+
+**方法: ExecuteBash()**
+**输入**:
+```
+args map[string]interface{}
+// {
+//   "command": "python3 script.py",
+//   "description": "运行分析脚本"
+// }
+```
+**输出**:
+```
+stdout string
+error
+```
+**流程**:
+1. 提取 command
+2. 安全检查（黑名单、路径验证）
+3. 使用 exec.Command() 执行
+4. 捕获 stdout/stderr
+5. 返回结果
+
+**安全机制**:
+- 命令黑名单（rm -rf, dd, mkfs 等）
+- 路径白名单检查
+- 超时控制
+- 用户确认（危险命令）
+
+#### 6.4 File Tools (file.go)
+
+**ViewFile()**
+**输入**:
+```
+args map[string]interface{}
+// {"path": "/path/to/file.sol"}
+```
+**输出**:
+```
+fileContent string
+error
+```
+
+**CreateFile()**
+**输入**:
+```
+args map[string]interface{}
+// {
+//   "path": "/path/to/report.md",
+//   "content": "# Audit Report\n..."
+// }
+```
+**输出**:
+```
+success string
+error
+```
+
+**StrReplace()**
+**输入**:
+```
+args map[string]interface{}
+// {
+//   "path": "/path/to/file",
+//   "old_str": "old content",
+//   "new_str": "new content"
+// }
+```
+**输出**:
+```
+success string
+error
+Module 7: Config Manager (internal/config/config.go)
+功能: 管理配置
+
+实现方式: 逻辑代码
+
+数据结构:
+
+go
+type Config struct {
+    DeepSeek DeepSeekConfig
+    Skills   SkillsConfig
+    Security SecurityConfig
+}
+
+type DeepSeekConfig struct {
+    APIKey   string
+    BaseURL  string
+    Model    string  // "deepseek-reasoner" 或 "deepseek-chat"
+    Timeout  int
+}
+
+type SkillsConfig struct {
+    SkillsDir string  // ~/.deepseek-agent/skills
+    AutoLoad  bool    // 是否自动加载所有 skills
+}
+
+type SecurityConfig struct {
+    CommandBlacklist []string
+    PathWhitelist    []string
+    RequireConfirm   bool  // 危险命令是否需要确认
+}
+```
+
+**方法: Load()**
+**输入**:
+```
+configPath string
+```
+**输出**:
+```
+*Config
+error
+```
+**流程**:
+1. 读取 YAML/JSON 配置文件
+2. 解析并验证
+3. 应用默认值
+4. 返回 Config 对象
+
+---
+
+## 数据流完整示例
+
+### 场景：用户输入 "帮我 fork ETH mainnet 在高度 12345"
+```
+┌─────────────────────────────────────────────────┐
+│ Step 1: CLI 入口 (逻辑代码)                      │
+├─────────────────────────────────────────────────┤
+│ 输入: "帮我 fork ETH mainnet 在高度 12345"       │
+│ 输出: 传递给 AgentCore.ProcessUserInput()       │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 2: Skill Matcher (逻辑代码)                │
+├─────────────────────────────────────────────────┤
+│ 输入: userInput + availableSkills[]             │
+│ 逻辑: 关键词匹配 "fork", "mainnet" → web3-dev   │
+│ 输出: matchedSkills = [web3-dev]                │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 3: Skill Loader (逻辑代码)                 │
+├─────────────────────────────────────────────────┤
+│ 输入: "web3-dev"                                 │
+│ 逻辑: 读取 SKILL.md，解析 frontmatter + body    │
+│ 输出: Skill 对象                                 │
+│   {                                              │
+│     Name: "web3-dev",                            │
+│     Description: "...",                          │
+│     BodyContent: "# Web3 Dev Skill\n..."        │
+│   }                                              │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 4: Prompt Builder (逻辑代码)               │
+├─────────────────────────────────────────────────┤
+│ 输入:                                            │
+│   - basePrompt                                   │
+│   - matchedSkills[0].BodyContent                 │
+│   - toolDefinitions[]                            │
+│ 逻辑: 字符串拼接                                 │
+│ 输出: systemPrompt (完整的 system prompt)        │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 5: DeepSeek Client 第一次调用 (AI)         │
+├─────────────────────────────────────────────────┤
+│ 输入:                                            │
+│   messages = [                                   │
+│     {role: "system", content: systemPrompt},    │
+│     {role: "user", content: "帮我 fork..."}     │
+│   ]                                              │
+│   tools = [bash_tool, view_file, ...]           │
+│ AI 推理:                                         │
+│   <think>用户要 fork 主网，需要用 anvil...</think> │
+│ 输出:                                            │
+│   {                                              │
+│     tool_calls: [{                               │
+│       function: {                                │
+│         name: "bash_tool",                       │
+│         arguments: '{"command":"which anvil"}'   │
+│       }                                          │
+│     }]                                           │
+│   }                                              │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 6: Tool Executor (逻辑代码)                │
+├─────────────────────────────────────────────────┤
+│ 输入: toolCall {name: "bash_tool", args: {...}} │
+│ 逻辑:                                            │
+│   1. 解析 arguments                              │
+│   2. 调用 ExecuteBash("which anvil")             │
+│   3. 执行命令，捕获输出                          │
+│ 输出: "/usr/local/bin/anvil"                     │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 7: 将结果添加到 messages (逻辑代码)         │
+├─────────────────────────────────────────────────┤
+│ messages.append({                                │
+│   role: "assistant",                             │
+│   tool_calls: [...]                              │
+│ })                                               │
+│ messages.append({                                │
+│   role: "tool",                                  │
+│   tool_call_id: "call_1",                        │
+│   content: "/usr/local/bin/anvil"                │
+│ })                                               │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 8: DeepSeek Client 第二次调用 (AI)         │
+├─────────────────────────────────────────────────┤
+│ 输入: 更新后的 messages                          │
+│ AI 推理:                                         │
+│   <think>anvil 已安装，现在执行 fork 命令</think>│
+│ 输出:                                            │
+│   {                                              │
+│     tool_calls: [{                               │
+│       function: {                                │
+│         name: "bash_tool",                       │
+│         arguments: '{                            │
+│           "command": "anvil --fork-url ... 12345"│
+│         }'                                       │
+│       }                                          │
+│     }]                                           │
+│   }                                              │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 9: Tool Executor 再次执行 (逻辑代码)        │
+├─────────────────────────────────────────────────┤
+│ 输入: bash_tool("anvil --fork-url ... 12345")   │
+│ 逻辑: 执行命令，启动后台进程                     │
+│ 输出: "Anvil started at http://127.0.0.1:8545"  │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 10: DeepSeek Client 第三次调用 (AI)        │
+├─────────────────────────────────────────────────┤
+│ 输入: 包含工具执行结果的 messages                │
+│ AI 推理: 任务完成，无需更多工具调用              │
+│ 输出:                                            │
+│   {                                              │
+│     content: "✓ 已成功 fork ETH mainnet..."     │
+│     tool_calls: null                             │
+│   }                                              │
+└────────────────┬────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────────────────┐
+│ Step 11: 返回给用户 (逻辑代码)                   │
+├─────────────────────────────────────────────────┤
+│ 输出: 打印最终响应到终端                         │
+└─────────────────────────────────────────────────┘
+AI vs 逻辑代码总结
+模块	实现方式	原因
+CLI 入口	逻辑代码	简单的参数解析
+Skill Loader	逻辑代码	文件读取和解析
+Skill Matcher	逻辑代码（MVP）/ AI（高级）	关键词匹配足够，AI 可提升准确度
+Prompt Builder	逻辑代码	字符串拼接
+DeepSeek Client	逻辑代码	HTTP API 调用
+核心推理	AI (DeepSeek)	理解任务、规划步骤、选择工具
+Tool Executor	逻辑代码	执行系统命令和文件操作
+Config Manager	逻辑代码	配置文件读取
+关键点: 只有任务理解和工具选择用 AI，其他都是逻辑代码！
+
+MVP 实现建议
+阶段 1: 最小可运行版本
+✅ CLI 入口 + 配置加载
+✅ Skill Loader（只支持 SKILL.md，忽略 scripts/）
+✅ Prompt Builder（简单拼接）
+✅ DeepSeek Client（基础 Chat API）
+✅ Tool Executor（只实现 bash_tool）
+✅ 简单的工具调用循环
+阶段 2: 完善功能
+实现所有文件操作工具
+Skill Matcher（关键词匹配）
+安全机制（命令黑名单、确认）
+支持 scripts/ 目录
+阶段 3: 高级特性
+allowed-tools 解析
+交互模式优化
+会话历史管理
+技能市场/分享
+这个设计清晰吗？需要我详细展开某个模块吗？
+
+非常棒，现在的问题是，tools 中的 tool 是标准的常用 linux macOS 命令行工具吗？还是需要专门编写的，比如文件读写 DeepSeek 它自己就知道 cat echo 等，还有你那个 bashtool ，deekseek 为什么知道先使用 which 命令
+
+2月1日
+非常好的问题！这涉及到 Tool 的抽象层次 的核心设计决策。
+
+问题的本质
+你问的是：我们给 DeepSeek 提供的 tools 应该在什么抽象层次？
+
+三种设计方案对比
+方案 A: 裸 bash_tool（最简单）⭐ 推荐 MVP
+Tool 定义:
+
+json
+{
+  "type": "function",
+  "function": {
+    "name": "bash_tool",
+    "description": "Execute any bash command on the system. You have access to all standard Unix commands like cat, echo, ls, grep, python3, node, git, foundry tools, etc.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "command": {
+          "type": "string",
+          "description": "The complete bash command to execute"
+        },
+        "description": {
+          "type": "string", 
+          "description": "Why you're running this command"
+        }
+      },
+      "required": ["command"]
+    }
+  }
+}
+DeepSeek 看到的就是一个万能工具
+
+它自己知道:
+
+✅ cat file.txt - 读文件
+✅ echo "content" > file.txt - 写文件
+✅ which anvil - 检查工具是否存在
+✅ python3 script.py - 运行 Python
+✅ forge test - 运行 Foundry
+为什么 DeepSeek 知道用 which？
+
+因为它的训练数据中包含大量的：
+
+Unix/Linux 文档
+Shell 脚本
+GitHub 代码
+Stack Overflow 问答
+所以它"学会"了：
+
+检查工具是否安装 → which 或 command -v
+读取文件 → cat
+创建文件 → echo 或 tee 或重定向
+查找进程 → ps 或 pgrep
+优点:
+
+极简实现，只需实现一个 tool
+DeepSeek 非常灵活，可以组合命令
+无需预测用户需要什么工具
+缺点:
+
+无法做参数验证
+错误处理粗糙
+安全性依赖黑名单
+方案 B: 高级抽象工具（Claude 的方式）
+Tool 定义:
+
+json
+[
+  {
+    "name": "view_file",
+    "description": "Read the contents of a file",
+    "parameters": {
+      "path": "string",
+      "view_range": "[start_line, end_line] (optional)"
+    }
+  },
+  {
+    "name": "create_file", 
+    "description": "Create a new file with content",
+    "parameters": {
+      "path": "string",
+      "content": "string"
+    }
+  },
+  {
+    "name": "str_replace",
+    "description": "Replace a unique string in a file",
+    "parameters": {
+      "path": "string",
+      "old_str": "string",
+      "new_str": "string"
+    }
+  },
+  {
+    "name": "bash_tool",
+    "description": "Execute bash commands (use sparingly)",
+    "parameters": {...}
+  }
+]
+DeepSeek 在这种模式下:
+
+读文件时会选择 view_file 而不是调用 bash_tool("cat ...")
+创建文件时会选择 create_file
+只有在没有合适工具时才用 bash_tool
+优点:
+
+参数类型安全（path 是 string，不会出现注入）
+更清晰的意图（容易理解 AI 在做什么）
+可以做精细的权限控制
+更好的错误提示
+缺点:
+
+需要实现多个工具
+需要预测用户可能的操作
+DeepSeek 需要学习"什么时候用哪个工具"
+方案 C: 混合方案（平衡）
+提供少量高频操作的专用工具 + bash_tool 兜底
+
+json
+[
+  {
+    "name": "read_file",
+    "description": "Read file contents. Prefer this over bash_tool for reading files.",
+    "parameters": {
+      "path": "string"
+    }
+  },
+  {
+    "name": "write_file",
+    "description": "Create or overwrite a file. Prefer this over bash_tool.",
+    "parameters": {
+      "path": "string",
+      "content": "string"
+    }
+  },
+  {
+    "name": "bash_tool",
+    "description": "Execute any bash command. Use this for operations not covered by other tools (like running git, foundry, python scripts, etc.)",
+    "parameters": {...}
+  }
+]
+```
+
+---
+
+## DeepSeek 为什么知道用 `which`？
+
+### 实验：我们来看实际例子
+
+假设用户说："帮我 fork ETH mainnet"
+
+#### 场景 1: 只有 bash_tool
+
+**System Prompt**:
+```
+你是助手，可以使用 bash_tool 执行命令。
+
+当前激活技能: Web3 Development
+
+# Web3 Development Skill
+
+## Foundry Fork 操作
+使用 anvil 可以 fork 主网：
+```bash
+anvil --fork-url <RPC> --fork-block-number <BLOCK>
+```
+
+确保已安装 foundry。
+```
+
+**DeepSeek 的推理**:
+```
+<think>
+用户要 fork ETH mainnet
+根据 skill 文档，需要用 anvil 命令
+我应该先检查 anvil 是否安装
+检查命令是否存在的方式：which 命令
+</think>
+
+tool_call: bash_tool("which anvil")
+为什么它知道用 which？
+
+它的训练数据中见过无数次这个模式：
+bash
+  # 检查工具是否安装
+  which git
+  which python3
+  command -v node
+场景 2: 如果有 check_command_exists 工具
+Tool 定义:
+
+json
+{
+  "name": "check_command_exists",
+  "description": "Check if a command-line tool is installed",
+  "parameters": {
+    "command": "string"
+  }
+}
+```
+
+**DeepSeek 的推理**:
+```
+<think>
+用户要 fork ETH mainnet
+需要 anvil
+我看到有个专门检查命令存在的工具
+</think>
+
+tool_call: check_command_exists("anvil")
+这个更明确，但需要额外实现工具
+
+关键洞察：DeepSeek 的"知识"来源
+1. 训练数据中的 Shell 使用模式
+DeepSeek 见过大量的：
+
+bash
+# 模式 1: 检查工具
+which docker || echo "Docker not found"
+command -v node >/dev/null 2>&1 || { echo "Node required"; exit 1; }
+
+# 模式 2: 读取文件
+cat config.json
+head -n 10 large_file.log
+tail -f app.log
+
+# 模式 3: 写入文件
+echo "data" > output.txt
+cat << EOF > config.yaml
+key: value
+EOF
+
+# 模式 4: 查找和过滤
+grep "error" logs/*.log
+find . -name "*.sol"
+ps aux | grep anvil
+2. SKILL.md 中的示例
+如果你的 SKILL.md 写：
+
+markdown
+## 检查 Foundry 是否安装
+```bash
+which forge
+which cast
+which anvil
+```
+```
+
+DeepSeek 会学习这个模式并复用！
+
+### 3. System Prompt 中的指导
+
+你可以在 system prompt 中明确告诉它：
+```
+## 最佳实践
+
+执行需要特定工具的命令前，先检查工具是否存在：
+- 使用 `which <tool>` 或 `command -v <tool>`
+- 如果不存在，提示用户安装
+
+读取文件时优先使用 `cat`
+创建文件时使用 `echo` 或重定向
+对你的 MVP 的建议
+推荐：方案 A（裸 bash_tool）
+原因:
+
+实现最简单 - 只需要一个工具
+DeepSeek 足够聪明 - 它知道标准 Unix 命令
+最灵活 - 用户可以做任何事（符合"全局"的定位）
+SKILL.md 可以教它 - 通过示例指导具体用法
+具体实现:
+
+go
+// internal/tool/bash.go
+
+func ExecuteBash(args map[string]interface{}) (string, error) {
+    command := args["command"].(string)
+    
+    // 安全检查
+    if isBlacklisted(command) {
+        return "", fmt.Errorf("命令被禁止: %s", command)
+    }
+    
+    // 执行
+    cmd := exec.Command("bash", "-c", command)
+    output, err := cmd.CombinedOutput()
+    
+    return string(output), err
+}
+
+// 工具定义
+var BashToolDefinition = Tool{
+    Type: "function",
+    Function: ToolFunction{
+        Name: "bash_tool",
+        Description: `Execute bash commands on the system. 
+You have access to all standard Unix commands (cat, echo, grep, etc.) 
+and any installed tools (git, python3, node, foundry, etc.).
+
+Best practices:
+- Check if tools exist before using them: which <tool>
+- Use standard Unix commands for file operations
+- Provide clear descriptions of what you're doing`,
+        Parameters: map[string]interface{}{
+            "type": "object",
+            "properties": map[string]interface{}{
+                "command": map[string]interface{}{
+                    "type": "string",
+                    "description": "The bash command to execute",
+                },
+                "description": map[string]interface{}{
+                    "type": "string",
+                    "description": "Human-readable explanation of what this command does",
+                },
+            },
+            "required": []string{"command"},
+        },
+    },
+}
+在 SKILL.md 中教它:
+
+markdown
+# Web3 Development Skill
+
+## 前置检查
+
+在使用 Foundry 工具前，先检查是否安装：
+```bash
+which forge
+which cast  
+which anvil
+```
+
+如果未安装，提示用户：
+```bash
+echo "请先安装 Foundry: curl -L https://foundry.paradigm.xyz | bash"
+```
+
+## Fork 主网
+```bash
+# 检查 anvil
+which anvil || { echo "Anvil not found"; exit 1; }
+
+# 启动 fork
+anvil --fork-url https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY \
+      --fork-block-number 12345
+```
+```
+
+**DeepSeek 会从这些示例中学习！**
+
+---
+
+## 如果要实现文件操作工具（可选）
+
+### 为什么要专门的文件工具？
+
+**场景：读取一个 10MB 的文件**
+
+**方案 A (bash_tool)**:
+```
+tool_call: bash_tool("cat large_file.sol")
+→ 返回整个文件内容（可能超出 context window）
+方案 B (read_file):
+
+go
+func ReadFile(args map[string]interface{}) (string, error) {
+    path := args["path"].(string)
+    startLine := args["start_line"].(int)  // 可选
+    endLine := args["end_line"].(int)      // 可选
+    
+    // 可以做智能截断
+    if fileSize > 100KB {
+        return "文件太大，请指定行范围", nil
+    }
+    
+    // 读取指定范围
+    return readLines(path, startLine, endLine), nil
+}
+优势:
+
+可以限制返回大小
+可以支持行范围
+更好的错误处理
+最终建议
+MVP 阶段
+只实现 bash_tool:
+
+go
+tools := []Tool{
+    BashToolDefinition,
+}
+依赖:
+
+DeepSeek 的 Unix 知识（它确实知道）
+SKILL.md 中的示例教学
+System prompt 中的最佳实践指导
+未来扩展
+如果发现 DeepSeek 经常犯某些错误，再添加专用工具：
+
+go
+tools := []Tool{
+    BashToolDefinition,
+    ReadFileToolDefinition,   // 如果经常读取大文件出问题
+    WriteFileToolDefinition,  // 如果经常写文件格式错误
+}
+```
+
+---
+
+## 验证实验
+
+你可以先测试 DeepSeek 是否真的知道这些命令：
+
+**Prompt**:
+```
+你有一个 bash_tool 可以执行 bash 命令。
+
+用户说："检查系统是否安装了 Python"
+
+你应该调用什么命令？
+DeepSeek 应该会回答:
+
+json
+{
+  "function": {
+    "name": "bash_tool",
+    "arguments": "{\"command\": \"which python3\"}"
+  }
+}
+或者：
+
+json
+{
+  "function": {
+    "name": "bash_tool", 
+    "arguments": "{\"command\": \"python3 --version\"}"
+  }
+}
