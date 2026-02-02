@@ -5,10 +5,12 @@ Build a global (not project-scoped) agent that supports a Claude-like skill syst
 
 ## Key Decisions
 - **Scope**: Global access (not bound to a single repo).
-- **Skills**: Claude-style SKILL.md files; content is injected into the system prompt.
+- **Skills**: Standard SKILL.md files following the AgentSkills specification: https://agentskills.io/specification
 - **Tools**: MVP provides a single `bash_tool` that can run standard Unix commands (cat, echo, which, git, python3, foundry, etc.).
 - **Reasoning**: Only task understanding and tool selection use the LLM; everything else is deterministic logic code.
 - **Model Independence**: The agent should work with any compatible chat-completion API; provider-specific code is isolated behind an adapter.
+- **Default UI**: Textual TUI is the primary interface (`main_tui.py`).
+- **Default Model**: DeepSeek V3 with JSON mode output for strict formatting.
 
 ## Directory Layout (proposed)
 ```
@@ -17,6 +19,8 @@ Build a global (not project-scoped) agent that supports a Claude-like skill syst
   user/
   downloaded/
 ```
+Each skill directory contains `SKILL.md` with frontmatter `name` matching the directory name (lowercase kebab-case) and a non-empty `description`.
+If a skill needs a custom executable entrypoint, use `metadata.entrypoint` in the frontmatter (extension field).
 
 ## Core Components
 1. **CLI / API Entry**
@@ -33,6 +37,8 @@ Build a global (not project-scoped) agent that supports a Claude-like skill syst
    - Returns output and errors to the model loop.
 6. **Safety Layer**
    - Command blacklist, path guardrails, confirmation on risky ops.
+7. **TUI Adapter**
+   - Textual UI for input, results, and logs.
 
 ## Tooling Strategy
 ### MVP (recommended)
@@ -106,6 +112,14 @@ You are assisting with Obsidian plugin development. Follow these comprehensive g
 
 ## Provider Abstraction
 Keep provider-specific details (auth, model names, response parsing, tool schema quirks) behind an adapter interface. The rest of the system should only depend on a provider-neutral `ChatClient` contract.
+
+## UI and Logging
+Follow the hexagonal UI and logging guide in `doc/ui-logging-guide.md` to keep core logic UI-agnostic and logging-driven.
+
+## DeepSeek Defaults
+- Model: DeepSeek V3 (`deepseek-chat`)
+- JSON mode: `response_format: {"type": "json_object"}` with prompts that include the word "json"
+- API key: `APIKEY_DEEPSEEK` environment variable
 
 ## Safety (MVP)
 - Blocklist dangerous commands (rm -rf, dd, etc.).
