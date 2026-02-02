@@ -681,6 +681,7 @@ def run_cli_loop(
                 max_loop_count=max_loop_count,
                 session_state=session_state,
             )
+            console.print()
             pending = None
             if not loop:
                 break
