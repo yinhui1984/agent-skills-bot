@@ -7,7 +7,7 @@ import json
 import logging
 import os
 import re
-
+import shlex
 
 from agent_skills_bot.core.models import SkillPlan, SkillStep, StepResult
 from agent_skills_bot.core.router import route_plan
@@ -46,10 +46,25 @@ from agent_skills_bot.interfaces.cli_theme import (
     _render_rule,
 )
 from agent_skills_bot.interfaces.cli_ui import _render_output, _render_plan
+from agent_skills_bot.utils.command_allowlist import load_command_allowlist, is_command_allowed
 from agent_skills_bot.utils.deepseek_client import chat_completion
 from agent_skills_bot.utils.logger import setup_cli_logger
 from agent_skills_bot.utils.mcp_client import call_mcp_tool, list_mcp_tools
 
+
+SHELL_SEPARATORS = {"|", "&&", ";", "||"}
+
+
+def _repair_unbalanced_quotes(command: str) -> tuple[str, str | None, bool]:
+    single_odd = command.count("'") % 2 == 1
+    double_odd = command.count('"') % 2 == 1
+    if not single_odd and not double_odd:
+        return command, None, False
+    if single_odd and not double_odd:
+        return command.replace("'", ""), "Removed unmatched single quotes in shell command.", True
+    if double_odd and not single_odd:
+        return command.replace('"', ""), "Removed unmatched double quotes in shell command.", True
+    return command, "Shell command has unbalanced single and double quotes.", False
 
 
 
@@ -179,6 +194,7 @@ def _execute_step(
     current_query = step.input
     last_pid: int | None = None
     last_output = ""
+    allowlist = load_command_allowlist()
     while True:
         loop_step += 1
         if loop_step > max_loop_count:
@@ -203,6 +219,26 @@ def _execute_step(
                 return StepResult(status="blocked", summary=str(exc), raw_output=last_output)
             command_text = " ".join(command)
         allowed_tools = allowed_tools_for(get_skill_meta(step.skill))
+        if command and not command[0].startswith("mcp__"):
+            if "mcp__shell_mcp__run_command" not in allowed_tools:
+                _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                console.print("Direct shell commands are disabled; allow mcp__shell_mcp__run_command.")
+                return StepResult(
+                    status="blocked",
+                    summary="Direct shell commands are disabled; allow mcp__shell_mcp__run_command.",
+                    raw_output=last_output,
+                )
+            if not is_command_allowed(command, allowlist):
+                _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                console.print(f"Shell command not in allowlist: {command[0]}")
+                return StepResult(
+                    status="blocked",
+                    summary=f"Shell command not in allowlist: {command[0]}",
+                    raw_output=last_output,
+                )
+            payload = json.dumps({"command": command_text}, ensure_ascii=False)
+            command = ["mcp__shell_mcp__run_command", payload]
+            command_text = " ".join(command)
         if allowed_tools:
             _render_rule("allowed-tools", style=INFO_RULE_STYLE)
             console.print(", ".join(allowed_tools))
@@ -259,6 +295,55 @@ def _execute_step(
                     args = _render_placeholders_in_args(args, session_state)
                 except ValueError as exc:
                     return StepResult(status="blocked", summary=str(exc), raw_output=last_output)
+                if tool == "run_command":
+                    cmd_value = args.get("command")
+                    if not isinstance(cmd_value, str) or not cmd_value.strip():
+                        _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                        console.print("Shell command is missing or invalid.")
+                        return StepResult(
+                            status="blocked",
+                            summary="Shell command is missing or invalid.",
+                            raw_output=last_output,
+                        )
+                    repaired, note, repaired_ok = _repair_unbalanced_quotes(cmd_value)
+                    if note:
+                        if repaired_ok:
+                            _render_rule("Warning", style=WARNING_RULE_STYLE)
+                            console.print(note)
+                        else:
+                            _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                            console.print(note)
+                            return StepResult(
+                                status="blocked",
+                                summary=note,
+                                raw_output=last_output,
+                            )
+                    if repaired != cmd_value:
+                        args["command"] = repaired
+                        cmd_value = repaired
+                    try:
+                        tokens = shlex.split(cmd_value)
+                    except ValueError:
+                        _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                        console.print("Shell command has invalid quoting.")
+                        return StepResult(
+                            status="blocked",
+                            summary="Shell command has invalid quoting.",
+                            raw_output=last_output,
+                        )
+                    if not is_command_allowed(tokens, allowlist):
+                        _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                        console.print(f"Shell command not in allowlist: {tokens[0]}")
+                        return StepResult(
+                            status="blocked",
+                            summary=f"Shell command not in allowlist: {tokens[0]}",
+                            raw_output=last_output,
+                        )
+                    safe_command = " ".join(
+                        token if token in SHELL_SEPARATORS else shlex.quote(token)
+                        for token in tokens
+                    )
+                    args["command"] = safe_command
                 _render_rule("MCP Args", style=INFO_RULE_STYLE)
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
                 result = call_mcp_tool(server, tool, args)
