@@ -15,6 +15,16 @@ import time
 from datetime import datetime, timezone
 
 from rich.console import Console
+from rich import box
+from rich.panel import Panel
+from prompt_toolkit import Application
+from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.key_binding import KeyBindings
+from prompt_toolkit.layout import Layout
+from prompt_toolkit.layout.containers import HSplit, ConditionalContainer
+from prompt_toolkit.filters import Condition
+from prompt_toolkit.styles import Style as PTStyle
+from prompt_toolkit.widgets import Frame, TextArea, Label
 from rich.rule import Rule
 from rich.text import Text
 
@@ -51,11 +61,67 @@ COMMANDS = {
 }
 
 
+class _CommandCompleter(Completer):
+    def get_completions(self, document, complete_event):
+        text = document.text_before_cursor
+        if not text.startswith("/"):
+            return
+        for cmd in COMMANDS:
+            if cmd.startswith(text):
+                yield Completion(cmd, start_position=-len(text))
+
+
+def _prompt_query() -> str:
+    text_area = TextArea(
+        multiline=False,
+        prompt="› ",
+        completer=_CommandCompleter(),
+        complete_while_typing=True,
+    )
+    hint_text = "Type a query or use / for commands"
+    hint = Label(hint_text, style="class:hint")
+    show_hint = Condition(lambda: not text_area.text.strip())
+    frame = Frame(
+        HSplit(
+            [
+                text_area,
+                ConditionalContainer(hint, filter=show_hint),
+            ]
+        )
+    )
+    style = PTStyle.from_dict(
+        {
+            "frame": "bg:#2b2b2b",
+            "frame.border": "#666666",
+            "text-area": "bg:#2b2b2b",
+            "text-area.prompt": "bold",
+            "hint": "#888888 bg:#2b2b2b",
+        }
+    )
+    bindings = KeyBindings()
+
+    @bindings.add("enter")
+    def _accept(event) -> None:
+        event.app.exit(result=text_area.text.strip())
+
+
+    @bindings.add("c-c")
+    def _cancel(event) -> None:
+        event.app.exit(result="")
+
+    app = Application(
+        layout=Layout(HSplit([frame])),
+        key_bindings=bindings,
+        style=style,
+        full_screen=False,
+    )
+    return app.run()
+
+
 def _render_output(lines: list[str]) -> None:
     if not lines:
         console.print(Rule("Result", style="green"))
         console.print("(no output)")
-        console.print(Rule(style="green"))
         return
 
     rendered = Text("", no_wrap=False)
@@ -69,7 +135,6 @@ def _render_output(lines: list[str]) -> None:
 
     console.print(Rule("Result", style="green"))
     console.print(rendered)
-    console.print(Rule(style="green"))
 
 
 def _render_command_help() -> None:
@@ -79,7 +144,6 @@ def _render_command_help() -> None:
         rendered.append(f"  {desc}\n")
     console.print(Rule("Commands", style="blue"))
     console.print(rendered)
-    console.print(Rule(style="blue"))
 
 
 def _handle_command(command: str) -> bool:
@@ -94,7 +158,6 @@ def _handle_command(command: str) -> bool:
         if not skills:
             console.print(Rule("Skills", style="yellow"))
             console.print("(no skills found)")
-            console.print(Rule(style="yellow"))
             return True
         rendered = Text()
         for skill in skills:
@@ -103,14 +166,12 @@ def _handle_command(command: str) -> bool:
             rendered.append(f"  {skill.path}\n\n", style="dim")
         console.print(Rule("Skills", style="green"))
         console.print(rendered)
-        console.print(Rule(style="green"))
         return True
     if command == "/mcp":
         servers = list_mcp_servers()
         console.print(Rule("MCP", style="blue"))
         if not servers:
             console.print("(no MCP servers configured)")
-            console.print(Rule(style="blue"))
             return True
         console.print(
             "Note: first-time MCP startup may take time to install/load dependencies. Please wait..."
@@ -125,14 +186,12 @@ def _handle_command(command: str) -> bool:
             else:
                 rendered.append("  (no tools)\n", style="dim")
         console.print(rendered)
-        console.print(Rule(style="blue"))
         return True
     if command == "/mcp-notifications":
         notes = drain_mcp_notifications()
         console.print(Rule("MCP Notifications", style="blue"))
         if not notes:
             console.print("(no notifications)")
-            console.print(Rule(style="blue"))
             return True
         rendered = Text()
         for server, items in notes.items():
@@ -140,7 +199,6 @@ def _handle_command(command: str) -> bool:
             for item in items:
                 rendered.append(f"  {json.dumps(item, ensure_ascii=False)}\n", style="dim")
         console.print(rendered)
-        console.print(Rule(style="blue"))
         return True
     if command in {"/quit", "/exit"}:
         raise SystemExit(0)
@@ -165,9 +223,6 @@ def run_cli(
             "last_abs_path": "",
         }
 
-    console.print(Rule("Input", style="blue"))
-    console.print(user_input)
-    console.print(Rule(style="blue"))
     console.print("Running...", style="yellow")
 
     try:
@@ -177,7 +232,6 @@ def run_cli(
         if references:
             console.print(Rule("References", style="cyan"))
             console.print("\n".join(references))
-            console.print(Rule(style="cyan"))
             load_refs = console.input("Load references into context? (Y/n): ").strip().lower()
             if not load_refs or load_refs in {"y", "yes"}:
                 reference_texts = read_reference_files(references)
@@ -185,7 +239,6 @@ def run_cli(
         logger.error(str(exc))
         console.print(Rule("Error", style="red"))
         console.print(str(exc))
-        console.print(Rule(style="red"))
         return
 
     _run_tool_loop(
@@ -308,7 +361,6 @@ def _run_tool_loop(
         if step > max_loop_count:
             console.print(Rule("Warning", style="yellow"))
             console.print("Max loop count reached.")
-            console.print(Rule(style="yellow"))
             return
         state_summary = _render_state_summary(state)
         state_json = _render_state_json(state)
@@ -325,15 +377,12 @@ def _run_tool_loop(
         if allowed_tools:
             console.print(Rule("allowed-tools", style="cyan"))
             console.print(", ".join(allowed_tools))
-            console.print(Rule(style="cyan"))
             if command and command[0] not in allowed_tools:
                 console.print(Rule("Blocked", style="red"))
                 console.print(f"Command tool '{command[0]}' is not in allowed-tools.")
-                console.print(Rule(style="red"))
                 return
         console.print(Rule("Command", style="magenta"))
         console.print(command_text)
-        console.print(Rule(style="magenta"))
         confirm = console.input("[bold yellow]Execute command?[/bold yellow] (Y/n): ").strip().lower()
         if confirm and confirm not in {"y", "yes"}:
             console.print("Cancelled.", style="dim")
@@ -369,7 +418,6 @@ def _run_tool_loop(
                         args["pid"] = last_pid
                 console.print(Rule("MCP Args", style="cyan"))
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
-                console.print(Rule(style="cyan"))
                 result = call_mcp_tool(server, tool, args)
                 output = json.dumps(result, indent=2, ensure_ascii=False)
                 _render_output(output.splitlines())
@@ -382,7 +430,6 @@ def _run_tool_loop(
             logger.error(str(exc))
             console.print(Rule("Error", style="red"))
             console.print(str(exc))
-            console.print(Rule(style="red"))
             return
 
         if command and command[0].startswith("mcp__"):
@@ -395,19 +442,20 @@ def _run_tool_loop(
 
         messages.append({"role": "assistant", "content": f"Command: {command_text}"})
         messages.append({"role": "user", "content": f"Tool output:\n{tool_output}"})
+        summary = _summarize_tool_output(tool_output, user_input)
+        if summary:
+            messages.append({"role": "assistant", "content": f"Tool summary: {summary}"})
         _update_state_from_command_and_output(state, command_text, tool_output)
         messages.append({"role": "user", "content": _render_state_summary(state)})
         decision = _decide_next_step(messages, user_input)
         if decision.get("done"):
             console.print(Rule("Result", style="green"))
             console.print(decision.get("summary", "Done."))
-            console.print(Rule(style="green"))
             return
         current_query = decision.get("next_input", "")
         if not current_query:
             console.print(Rule("Warning", style="yellow"))
             console.print("No next step provided; stopping.")
-            console.print(Rule(style="yellow"))
             return
 
 
@@ -425,6 +473,28 @@ def _decide_next_step(messages: list[dict[str, str]], user_input: str) -> dict:
         return json.loads(content)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         return _repair_decision(messages, user_input)
+
+
+def _summarize_tool_output(tool_output: str, user_input: str) -> str:
+    if not tool_output.strip():
+        return ""
+    if len(tool_output) < 400:
+        return tool_output.strip().splitlines()[0]
+    system = (
+        "Summarize the tool output in one short sentence focused on task completion. "
+        "Do not include extra commentary."
+    )
+    response = chat_completion(
+        [
+            {"role": "system", "content": system},
+            {"role": "user", "content": f"User: {user_input}\nOutput:\n{tool_output}"},
+        ],
+        response_format={"type": "text"},
+    )
+    try:
+        return response["choices"][0]["message"]["content"].strip()
+    except (KeyError, IndexError, TypeError):
+        return ""
 
 
 def _repair_decision(messages: list[dict[str, str]], user_input: str) -> dict:
@@ -593,7 +663,7 @@ def run_cli_loop(
     try:
         while True:
             if not pending:
-                pending = console.input("[bold]Query[/bold] (empty to quit): ").strip()
+                pending = _prompt_query()
             if not pending:
                 break
             if pending.startswith("/"):
@@ -601,7 +671,6 @@ def run_cli_loop(
                 if not handled:
                     console.print(Rule("Command", style="yellow"))
                     console.print("Unknown command. Try /help")
-                    console.print(Rule(style="yellow"))
                 pending = None
                 if not loop:
                     break
@@ -632,5 +701,4 @@ def _notification_loop(stop_event: threading.Event) -> None:
                 for item in items:
                     rendered.append(f"  {json.dumps(item, ensure_ascii=False)}\n", style="dim")
             console.print(rendered)
-            console.print(Rule(style="blue"))
         time.sleep(NOTIFY_POLL_SECONDS)
