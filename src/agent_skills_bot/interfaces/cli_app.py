@@ -47,7 +47,11 @@ from agent_skills_bot.interfaces.cli_theme import (
 )
 from agent_skills_bot.interfaces.cli_ui import _render_output, _render_plan
 from agent_skills_bot.utils.bootstrap import ensure_default_user_config
-from agent_skills_bot.utils.command_allowlist import load_command_allowlist, is_command_allowed
+from agent_skills_bot.utils.command_allowlist import (
+    find_blocked_command,
+    load_command_allowlist,
+    is_command_allowed,
+)
 from agent_skills_bot.utils.deepseek_client import chat_completion
 from agent_skills_bot.utils.logger import setup_cli_logger
 from agent_skills_bot.utils.mcp_client import call_mcp_tool, list_mcp_tools
@@ -231,11 +235,13 @@ def _execute_step(
                     raw_output=last_output,
                 )
             if not is_command_allowed(command, allowlist):
+                blocked = find_blocked_command(command, allowlist)
+                blocked_cmd = blocked or (command[0] if command else "")
                 _render_rule("Blocked", style=ERROR_RULE_STYLE)
-                console.print(f"Shell command not in allowlist: {command[0]}")
+                console.print(f"Shell command not in allowlist: {blocked_cmd}")
                 return StepResult(
                     status="blocked",
-                    summary=f"Shell command not in allowlist: {command[0]}",
+                    summary=f"Shell command not in allowlist: {blocked_cmd}",
                     raw_output=last_output,
                 )
             payload = json.dumps({"command": command_text}, ensure_ascii=False)
@@ -334,11 +340,13 @@ def _execute_step(
                             raw_output=last_output,
                         )
                     if not is_command_allowed(tokens, allowlist):
+                        blocked = find_blocked_command(tokens, allowlist)
+                        blocked_cmd = blocked or (tokens[0] if tokens else "")
                         _render_rule("Blocked", style=ERROR_RULE_STYLE)
-                        console.print(f"Shell command not in allowlist: {tokens[0]}")
+                        console.print(f"Shell command not in allowlist: {blocked_cmd}")
                         return StepResult(
                             status="blocked",
-                            summary=f"Shell command not in allowlist: {tokens[0]}",
+                            summary=f"Shell command not in allowlist: {blocked_cmd}",
                             raw_output=last_output,
                         )
                     args["command"] = cmd_value

@@ -38,6 +38,7 @@ DEFAULT_ALLOWLIST = {
         "uniq",
         "cut",
         "tr",
+        "sed",
         "yt-dlp",
     ],
     "allow_globs": [
@@ -59,6 +60,7 @@ DEFAULT_ALLOWLIST = {
         "uniq:*",
         "cut:*",
         "tr:*",
+        "sed:*",
         "yt-dlp:*",
     ],
 }
@@ -141,13 +143,19 @@ def _match_allowlist(cmd: str, args: list[str], allowlist: CommandAllowlist) -> 
 
 
 def is_command_allowed(tokens: list[str], allowlist: CommandAllowlist) -> bool:
+    return find_blocked_command(tokens, allowlist) is None
+
+
+def find_blocked_command(
+    tokens: list[str], allowlist: CommandAllowlist
+) -> str | None:
     if not tokens:
-        return False
+        return None
     for segment in _split_shell_commands(tokens):
         if not segment:
-            return False
+            return ""
         cmd = segment[0]
         args = segment[1:]
         if not _match_allowlist(cmd, args, allowlist):
-            return False
-    return True
+            return cmd
+    return None
