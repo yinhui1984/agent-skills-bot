@@ -15,6 +15,7 @@ from typing import List
 from agent_skills_bot.core.models import SkillMeta, SkillResult
 from agent_skills_bot.core.skills import load_skills
 from agent_skills_bot.utils.deepseek_client import chat_completion
+from agent_skills_bot.utils.mcp_client import list_mcp_tools_summary
 
 
 DEFAULT_SKILLS_ROOT = os.path.expanduser("~/.agent-skills-bot/skills")
@@ -94,11 +95,18 @@ def _build_llm_command(
     system_prompt = (
         "You are an execution planner. Return json only. "
         "Output schema: {\"command\": \"...\", \"description\": \"...\"}. "
+        "If you choose an MCP tool, include JSON arguments after the tool name, "
+        "e.g. \"mcp__server__tool {\\\"path\\\":\\\"...\\\"}\". "
+        "The JSON must be valid (double quotes, no trailing commas, no shell substitutions). "
         "Use the provided skill instructions to craft a command for the user query."
     )
 
     references_block = "\n".join(f"- {path}" for path in references) or "(none)"
     references_content = "\n\n".join(reference_texts or [])
+    mcp_tools = list_mcp_tools_summary()
+    mcp_block = "\n".join(
+        f"- {server}: {', '.join(names)}" for server, names in mcp_tools.items()
+    ) or "(none)"
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -110,6 +118,7 @@ def _build_llm_command(
             "role": "user",
             "content": f"Reference contents:\n{references_content}" if references_content else "Reference contents: (not loaded)",
         },
+        {"role": "user", "content": f"Available MCP tools:\n{mcp_block}"},
         {"role": "user", "content": f"User request: {query}"},
     ]
     response = chat_completion(messages, response_format={"type": "json_object"})
@@ -188,6 +197,36 @@ def read_reference_files(paths: List[str]) -> List[str]:
 
 async def execute_command(skill_name: str, command: List[str]) -> SkillResult:
     logger.info("Running skill: %s", skill_name)
-    output = await asyncio.to_thread(_run_command, command)
+    resolved = _resolve_command(skill_name, command)
+    output = await asyncio.to_thread(_run_command, resolved)
     lines = [line for line in output.splitlines() if line.strip()]
     return SkillResult(skill=skill_name, raw_output=output, lines=lines)
+
+
+def _resolve_command(skill_name: str, command: List[str]) -> List[str]:
+    if not command:
+        return command
+    head = command[0]
+    if head.startswith("mcp__"):
+        return command
+    path = pathlib.Path(head)
+    if path.is_absolute():
+        return command
+    if path.exists():
+        return command
+    skill = _find_skill_meta(skill_name)
+    candidate = pathlib.Path(skill.path) / head
+    if candidate.exists():
+        return _wrap_command_for_file(candidate, command[1:])
+    return command
+
+
+def _wrap_command_for_file(path: pathlib.Path, rest: List[str]) -> List[str]:
+    suffix = path.suffix.lower()
+    if suffix == ".py":
+        return ["python", str(path), *rest]
+    if suffix == ".js":
+        return ["node", str(path), *rest]
+    if suffix in {".sh", ".bash"}:
+        return ["bash", str(path), *rest]
+    return [str(path), *rest]

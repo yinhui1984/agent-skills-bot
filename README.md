@@ -27,7 +27,23 @@ If a skill declares `allowed-tools`, commands outside that list are blocked.
 ### Commands
 - `/list` list installed skills
 - `/help` show command help
+- `/mcp` list MCP servers and tools
+- `/mcp-notifications` show pending MCP notifications
 - `/quit` exit the CLI
+
+### MCP
+Create `~/.agent-skills-bot/mcp.json` with:
+```
+{
+  "mcpServers": {
+    "desktop-commander": {
+      "command": "npx",
+      "args": ["-y", "@wonderwhy-er/desktop-commander"]
+    }
+  }
+}
+```
+MCP tools can be invoked as `mcp__server__tool` with JSON arguments.
 
 ## Structure
 - `doc/`: design notes and specs
