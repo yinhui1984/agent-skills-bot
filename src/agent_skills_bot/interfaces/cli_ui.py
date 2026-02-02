@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from prompt_toolkit import Application
 from prompt_toolkit.completion import Completer, Completion
@@ -136,6 +137,14 @@ def _render_banner() -> None:
         "|____/  |_|\\_\\ |___| |_____| |_____|     |____/   \\___/    |_|  \n"
     )
     console.print(banner, style="bold cyan")
+    config_dir = Path.home() / ".agent-skills-bot"
+    console.print(f"Config dir: {config_dir}", style="dim")
+    console.print("  - skills/: installed skills (SKILL.md)", style="dim")
+    console.print(
+        "  - command-allowlist.json: allowlisted shell commands for run_command",
+        style="dim",
+    )
+    console.print("  - mcp.json: MCP server configuration", style="dim")
 
 
 def _render_plan(plan: SkillPlan) -> None:
