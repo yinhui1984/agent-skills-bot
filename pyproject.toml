@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "UNLICENSED" }
 authors = [{ name = "agent-skills-bot contributors" }]
 dependencies = [
-  "textual>=0.50.0"
+  "rich>=13.7.0"
 ]
 
 [tool.setuptools]

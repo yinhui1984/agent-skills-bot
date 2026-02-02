@@ -9,7 +9,7 @@ Build a global (not project-scoped) agent that supports a Claude-like skill syst
 - **Tools**: MVP provides a single `bash_tool` that can run standard Unix commands (cat, echo, which, git, python3, foundry, etc.).
 - **Reasoning**: Only task understanding and tool selection use the LLM; everything else is deterministic logic code.
 - **Model Independence**: The agent should work with any compatible chat-completion API; provider-specific code is isolated behind an adapter.
-- **Default UI**: Textual TUI is the primary interface (`main_tui.py`).
+- **Default UI**: CLI is the primary interface (`main_cli.py`).
 - **Default Model**: DeepSeek V3 with JSON mode output for strict formatting.
 
 ## Directory Layout (proposed)
@@ -37,8 +37,8 @@ If a skill needs a custom executable entrypoint, use `metadata.entrypoint` in th
    - Returns output and errors to the model loop.
 6. **Safety Layer**
    - Command blacklist, path guardrails, confirmation on risky ops.
-7. **TUI Adapter**
-   - Textual UI for input, results, and logs.
+7. **CLI Adapter**
+   - CLI for input, logs, and formatted output.
 
 ## Tooling Strategy
 ### MVP (recommended)

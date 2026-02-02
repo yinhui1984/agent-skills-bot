@@ -5,7 +5,7 @@ This repository is currently documentation-focused. Key paths:
 - `doc/`: Design notes and specs (see `doc/design.md`).
 - `.venv/`: Local Python environment (already created).
 - `~/.agent-skills-bot/skills/`: Runtime skills root (outside repo).
- - `main_tui.py`: Textual TUI entrypoint.
+ - `main_cli.py`: CLI entrypoint.
 
 As implementation begins, place source code under a dedicated top-level directory (e.g., `src/` or `cmd/`) and tests under `tests/` to keep layout predictable.
 Follow the UI/logging guidance in `doc/ui-logging-guide.md` to keep core logic UI-agnostic.
@@ -14,7 +14,7 @@ Follow the UI/logging guidance in `doc/ui-logging-guide.md` to keep core logic U
 The project uses Python. No build or test commands are defined yet. When added, document them here with short explanations, for example:
 - `python -m venv .venv`: Create the virtual environment.
 - `source .venv/bin/activate`: Activate the environment (macOS/Linux).
-- `python main_tui.py`: Run the Textual TUI.
+- `python main_cli.py "..."`: Run the CLI with a query.
 
 ## Coding Style & Naming Conventions
 - Keep files and docs in ASCII unless there is a clear reason to introduce Unicode.
@@ -44,5 +44,5 @@ The MVP is model-agnostic and centers on:
 - A tool executor (MVP: `bash_tool`).
 
 Keep orchestration deterministic and reserve AI for task understanding and tool selection.
-Default UI is Textual; DeepSeek V3 JSON mode is the default model configuration.
+Default UI is CLI; DeepSeek V3 JSON mode is the default model configuration.
 Skills follow the AgentSkills specification: https://agentskills.io/specification

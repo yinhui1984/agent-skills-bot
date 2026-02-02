@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-chat"  # DeepSeek V3
+DEFAULT_MODEL = "deepseek-chat"
 
 
 class DeepSeekError(RuntimeError):
@@ -23,10 +23,15 @@ def _require_api_key() -> str:
     return api_key
 
 
-def chat_completion(messages: List[Dict[str, str]], *, response_format: Dict[str, Any]) -> Dict[str, Any]:
+def chat_completion(
+    messages: List[Dict[str, str]],
+    *,
+    response_format: Dict[str, Any],
+    model: str | None = None,
+) -> Dict[str, Any]:
     api_key = _require_api_key()
     base_url = os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
-    model = os.environ.get("DEEPSEEK_MODEL", DEFAULT_MODEL)
+    model = model or os.environ.get("DEEPSEEK_MODEL", DEFAULT_MODEL)
 
     payload = {
         "model": model,

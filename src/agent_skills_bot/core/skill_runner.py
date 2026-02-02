@@ -6,11 +6,15 @@ import asyncio
 import logging
 import os
 import pathlib
+import json
+import shlex
 import subprocess
-from typing import List
+from dataclasses import dataclass
+from typing import List, Tuple
 
 from agent_skills_bot.core.models import SkillMeta, SkillResult
 from agent_skills_bot.core.skills import load_skills
+from agent_skills_bot.utils.deepseek_client import chat_completion
 
 
 DEFAULT_SKILLS_ROOT = os.path.expanduser("~/.agent-skills-bot/skills")
@@ -61,6 +65,45 @@ def _command_for_entry(entry_path: pathlib.Path, query: str) -> List[str]:
     return ["python", str(entry_path), query]
 
 
+def _read_skill_body(skill_path: pathlib.Path) -> str:
+    skill_md = skill_path / "SKILL.md"
+    if not skill_md.exists():
+        return ""
+    lines = skill_md.read_text(encoding="utf-8").splitlines()
+    if lines and lines[0].strip() == "---":
+        for idx in range(1, len(lines)):
+            if lines[idx].strip() == "---":
+                return "\n".join(lines[idx + 1 :]).strip()
+    return "\n".join(lines).strip()
+
+
+def _build_llm_command(skill: SkillMeta, query: str) -> List[str]:
+    skill_body = _read_skill_body(pathlib.Path(skill.path))
+    system_prompt = (
+        "You are an execution planner. Return json only. "
+        "Output schema: {\"command\": \"...\", \"description\": \"...\"}. "
+        "Use the provided skill instructions to craft a command for the user query."
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": f"Skill instructions:\n{skill_body}"},
+        {"role": "user", "content": f"User request: {query}"},
+    ]
+    response = chat_completion(messages, response_format={"type": "json_object"})
+    try:
+        content = response["choices"][0]["message"]["content"]
+        payload = json.loads(content)
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        raise RuntimeError("LLM did not return valid JSON command") from exc
+
+    command = str(payload.get("command", "")).strip()
+    if not command:
+        raise RuntimeError("LLM command was empty")
+
+    return shlex.split(command)
+
+
 def _run_command(command: List[str]) -> str:
     result = subprocess.run(
         command,
@@ -81,10 +124,16 @@ def _find_skill_meta(skill_name: str) -> SkillMeta:
     raise FileNotFoundError(f"Skill not found: {skill_name}")
 
 
-async def run_skill(skill_name: str, query: str) -> SkillResult:
+def build_command(skill_name: str, query: str) -> List[str]:
     skill = _find_skill_meta(skill_name)
-    logger.info("Running skill: %s", skill.name)
-    command = _select_skill_command(skill, query)
+    try:
+        return _select_skill_command(skill, query)
+    except FileNotFoundError:
+        return _build_llm_command(skill, query)
+
+
+async def execute_command(skill_name: str, command: List[str]) -> SkillResult:
+    logger.info("Running skill: %s", skill_name)
     output = await asyncio.to_thread(_run_command, command)
     lines = [line for line in output.splitlines() if line.strip()]
-    return SkillResult(skill=skill.name, raw_output=output, lines=lines)
+    return SkillResult(skill=skill_name, raw_output=output, lines=lines)
