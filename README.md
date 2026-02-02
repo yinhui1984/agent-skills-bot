@@ -84,19 +84,26 @@ Create `~/.agent-skills-bot/mcp.json`:
 ```
 {
   "mcpServers": {
+    "shell_mcp": {
+      "command": "npx",
+      "args": ["-y", "mcp-shell"]
+    },
     "filesystem": {
       "command": "npx",
-        "args": [
-          "-y",
-          "@modelcontextprotocol/server-filesystem",
-          "/Users/yourname/Downloads",
-          "/Users/yourname/Desktop"
-        ]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/yourname/Downloads",
+        "/Users/yourname/Desktop"
+      ]
     }
   }
 }
 ```
 Adjust the paths for your machine.
+On first run, if `mcp.json` is missing or does not include `shell_mcp`, the CLI writes a
+default `shell_mcp` entry (`npx -y mcp-shell`). It also creates a default
+`~/.agent-skills-bot/skills/shell-mcp/SKILL.md` if the skill is missing.
 
 MCP tools can be invoked as `mcp__server__tool` with JSON arguments.
 

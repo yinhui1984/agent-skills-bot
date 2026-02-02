@@ -24,7 +24,6 @@ class MCPServerConfig:
     env: Dict[str, str]
     type: str = "stdio"
 
-
 def load_mcp_config() -> Dict[str, MCPServerConfig]:
     path = os.environ.get("AGENT_SKILLS_MCP_CONFIG", DEFAULT_CONFIG_PATH)
     config_path = pathlib.Path(path)
@@ -203,6 +202,16 @@ class MCPManager:
         self._configs = load_mcp_config()
         self._clients: Dict[str, MCPClient] = {}
 
+    def reload(self) -> None:
+        new_configs = load_mcp_config()
+        removed = set(self._clients) - set(new_configs)
+        for name in removed:
+            try:
+                self._clients[name].shutdown()
+            finally:
+                self._clients.pop(name, None)
+        self._configs = new_configs
+
     def servers(self) -> List[str]:
         return sorted(self._configs.keys())
 
@@ -241,6 +250,10 @@ _manager = MCPManager()
 
 def list_mcp_servers() -> List[str]:
     return _manager.servers()
+
+
+def reload_mcp_config() -> None:
+    _manager.reload()
 
 
 def list_mcp_tools_summary() -> Dict[str, List[str]]:

@@ -46,6 +46,7 @@ from agent_skills_bot.interfaces.cli_theme import (
     _render_rule,
 )
 from agent_skills_bot.interfaces.cli_ui import _render_output, _render_plan
+from agent_skills_bot.utils.bootstrap import ensure_default_user_config
 from agent_skills_bot.utils.command_allowlist import load_command_allowlist, is_command_allowed
 from agent_skills_bot.utils.deepseek_client import chat_completion
 from agent_skills_bot.utils.logger import setup_cli_logger
@@ -75,6 +76,7 @@ def run_cli(
     session_state: dict[str, object] | None = None,
 ) -> None:
     setup_cli_logger()
+    ensure_default_user_config()
     logger = logging.getLogger("app.core")
     if session_state is None:
         session_state = {
@@ -339,11 +341,7 @@ def _execute_step(
                             summary=f"Shell command not in allowlist: {tokens[0]}",
                             raw_output=last_output,
                         )
-                    safe_command = " ".join(
-                        token if token in SHELL_SEPARATORS else shlex.quote(token)
-                        for token in tokens
-                    )
-                    args["command"] = safe_command
+                    args["command"] = cmd_value
                 _render_rule("MCP Args", style=INFO_RULE_STYLE)
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
                 result = call_mcp_tool(server, tool, args)

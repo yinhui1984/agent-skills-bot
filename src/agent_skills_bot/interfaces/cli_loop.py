@@ -17,6 +17,7 @@ from agent_skills_bot.interfaces.cli_theme import (
     _render_rule,
 )
 from agent_skills_bot.interfaces.cli_ui import _handle_command, _prompt_query, _render_banner
+from agent_skills_bot.utils.bootstrap import ensure_default_user_config
 from agent_skills_bot.utils.logger import setup_cli_logger
 from agent_skills_bot.utils.mcp_client import drain_mcp_notifications
 
@@ -31,6 +32,7 @@ def run_cli_loop(
     max_loop_count: int = 10,
 ) -> None:
     setup_cli_logger()
+    ensure_default_user_config()
     if initial_query is None:
         _render_banner()
     session_state: dict[str, object] = {
