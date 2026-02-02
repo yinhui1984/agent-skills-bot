@@ -132,18 +132,3 @@ def load_skills(include_builtin: bool = True) -> List[SkillMeta]:
 
     return skills
 
-
-def filter_skills(skills: List[SkillMeta], query: str, limit: int = 20) -> List[SkillMeta]:
-    terms = [t for t in query.lower().split() if t]
-    if not terms:
-        return skills[:limit]
-
-    scored = []
-    for skill in skills:
-        hay = f"{skill.name} {skill.description}".lower()
-        score = sum(1 for t in terms if t in hay)
-        if score:
-            scored.append((score, skill))
-
-    scored.sort(key=lambda item: item[0], reverse=True)
-    return [skill for _, skill in scored[:limit]]

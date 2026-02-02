@@ -144,7 +144,11 @@ def _build_llm_command(
         {"role": "user", "content": f"Available MCP tools:\n{mcp_block}"},
         {"role": "user", "content": f"User request: {query}"},
     ]
-    response = chat_completion(messages, response_format={"type": "json_object"})
+    response = chat_completion(
+        messages,
+        response_format={"type": "json_object"},
+        purpose="build_llm_command",
+    )
     try:
         content = response["choices"][0]["message"]["content"]
         payload = json.loads(content)
@@ -202,7 +206,23 @@ def build_command(
     try:
         return _select_skill_command(skill, query)
     except FileNotFoundError:
+        direct = _build_direct_mcp_command(skill, query)
+        if direct:
+            return direct
         return _build_llm_command(skill, query, reference_texts, state_summary, state_json)
+
+
+def _build_direct_mcp_command(skill: SkillMeta, query: str) -> List[str] | None:
+    tools = allowed_tools_for(skill)
+    if len(tools) != 1:
+        return None
+    tool = tools[0]
+    if not tool.startswith("mcp__"):
+        return None
+    if tool.endswith("__run_command"):
+        payload = json.dumps({"command": query})
+        return [tool, payload]
+    return None
 
 
 def list_reference_files(skill_name: str) -> List[str]:

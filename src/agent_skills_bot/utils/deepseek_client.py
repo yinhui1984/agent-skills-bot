@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.request
+import logging
 from typing import Any, Dict, List
 
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-chat"
+logger = logging.getLogger("app.core")
 
 
 class DeepSeekError(RuntimeError):
@@ -28,10 +31,16 @@ def chat_completion(
     *,
     response_format: Dict[str, Any],
     model: str | None = None,
+    purpose: str | None = None,
 ) -> Dict[str, Any]:
     api_key = _require_api_key()
     base_url = os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
     model = model or os.environ.get("DEEPSEEK_MODEL", DEFAULT_MODEL)
+
+    messages_len = _messages_length(messages)
+    request_purpose = purpose or "unspecified"
+    logger.info("AI request purpose=%s model=%s messages_len=%s", request_purpose, model, messages_len)
+    start = time.monotonic()
 
     payload = {
         "model": model,
@@ -55,8 +64,27 @@ def chat_completion(
             body = resp.read().decode("utf-8")
     except Exception as exc:
         raise DeepSeekError(f"DeepSeek request failed: {exc}") from exc
+    finally:
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        logger.info(
+            "AI response purpose=%s bytes=%s elapsed_ms=%s",
+            request_purpose,
+            len(locals().get("body", "") or ""),
+            elapsed_ms,
+        )
 
     try:
         return json.loads(body)
     except json.JSONDecodeError as exc:
         raise DeepSeekError("DeepSeek response was not valid JSON") from exc
+
+
+def _messages_length(messages: List[Dict[str, str]]) -> int:
+    total = 0
+    for item in messages:
+        content = item.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        else:
+            total += len(str(content))
+    return total

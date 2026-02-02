@@ -10,7 +10,7 @@ from typing import Dict, List
 
 from agent_skills_bot.utils.deepseek_client import chat_completion
 from agent_skills_bot.core.models import SkillMeta, SkillQuery, SkillPlan, SkillStep
-from agent_skills_bot.core.skills import filter_skills, load_skills
+from agent_skills_bot.core.skills import load_skills
 
 
 SYSTEM_PROMPT = (
@@ -37,9 +37,9 @@ SYSTEM_PROMPT = (
     "  ]\n"
     "}\n\n"
     "If a step depends on earlier outputs, set requires using artifacts.* keys "
-    "(e.g., artifacts.text, artifacts.file_path, artifacts.url_list).\n"
-    "When the user asks to save/write/upload, include a separate step that performs the file operation "
-    "using a skill capable of filesystem or shell operations.\n"
+    "(e.g., artifacts.text, artifacts.file_path, artifacts.url_list). "
+    "Also include those required values in the step input using placeholders like "
+    "{{artifacts.text}} so the executor can substitute them.\n"
     "The input must be the task parameters only, not the user's full sentence.\n"
     "Examples:\n"
     "- User: \"search github voice to text\" -> input: \"voice to text\"\n"
@@ -232,8 +232,8 @@ def _refine_plan(user_input: str, plan: SkillPlan, skills: List[SkillMeta]) -> S
     system = (
         "You are refining a draft execution plan. Return json only with the same schema as before. "
         "Ensure each step uses a skill capable of the action based on the capabilities list and tool hints. "
-        "If the user asks to save/write/upload to disk, the responsible step must use a skill with file_write "
-        "or shell capability. Do not assign file operations to skills without those capabilities. "
+        "Do not assign file operations to skills without file_write or shell capability. "
+        "If a step declares requires, the step input must include placeholders like {{artifacts.text}}. "
         "If the plan is already correct, return it unchanged."
     )
     payload = _plan_to_payload(plan)
@@ -249,6 +249,7 @@ def _refine_plan(user_input: str, plan: SkillPlan, skills: List[SkillMeta]) -> S
         messages,
         response_format={"type": "json_object"},
         model="deepseek-chat",
+        purpose="route_plan",
     )
     refined = parse_skill_plan(response)
     if _is_valid_plan(refined, skills):
@@ -264,6 +265,7 @@ def _confirm_messages(user_input: str, draft: SkillPlan, skills: List[SkillMeta]
         "Return json only with the same schema as before. "
         "Ensure the plan satisfies the user request and each step uses a skill "
         "capable of the intended action based on the capabilities list. "
+        "If a step declares requires, the step input must include placeholders like {{artifacts.text}}. "
         "If the plan is missing required actions, correct it. "
         "Keep the input as-is unless it is empty or not executable parameters. "
         "Do not add new fields.\n\n"
@@ -288,13 +290,14 @@ def route_plan(user_input: str) -> SkillPlan:
     skills = load_skills(include_builtin=True)
     if not skills:
         raise ValueError("No skills found under ~/.agent-skills-bot/skills")
-    candidates = filter_skills(skills, user_input)
+    candidates = skills
     messages = build_messages(user_input, candidates)
 
     response = chat_completion(
         messages,
         response_format={"type": "json_object"},
         model="deepseek-chat",
+        purpose="refine_plan",
     )
     draft = parse_skill_plan(response)
     if _is_valid_plan(draft, skills):
@@ -302,6 +305,7 @@ def route_plan(user_input: str) -> SkillPlan:
             _confirm_messages(user_input, draft, candidates),
             response_format={"type": "json_object"},
             model="deepseek-chat",
+            purpose="confirm_plan",
         )
         confirmed = parse_skill_plan(confirm)
         if _is_valid_plan(confirmed, skills):
@@ -311,6 +315,7 @@ def route_plan(user_input: str) -> SkillPlan:
         messages,
         response_format={"type": "json_object"},
         model="deepseek-reasoner",
+        purpose="route_plan_fallback",
     )
     result = parse_skill_plan(fallback)
     if not _is_valid_plan(result, skills):

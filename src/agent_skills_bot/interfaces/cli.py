@@ -303,7 +303,11 @@ def _infer_mcp_args(
         },
         *context,
     ]
-    response = chat_completion(messages, response_format={"type": "json_object"})
+    response = chat_completion(
+        messages,
+        response_format={"type": "json_object"},
+        purpose="infer_mcp_args",
+    )
     try:
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
@@ -342,7 +346,11 @@ def _repair_mcp_args(
         },
         *context,
     ]
-    response = chat_completion(messages, response_format={"type": "json_object"})
+    response = chat_completion(
+        messages,
+        response_format={"type": "json_object"},
+        purpose="repair_mcp_args",
+    )
     try:
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
@@ -358,6 +366,24 @@ def _normalize_mcp_args(args: dict) -> dict:
     if "command" in args and isinstance(args["command"], str) and args["command"].startswith("mcp__"):
         return {}
     return args
+
+
+def _coerce_mcp_args(raw: str, tool: str) -> dict | None:
+    raw = raw.strip()
+    if not raw:
+        return None
+    if tool == "run_command":
+        if raw.startswith("{") and raw.endswith("}"):
+            inner = raw[1:-1].strip()
+            if inner.startswith("command:"):
+                cmd = inner[len("command:") :].strip()
+                return {"command": _strip_quotes(cmd)}
+        if raw.startswith("command:"):
+            cmd = raw[len("command:") :].strip()
+            return {"command": _strip_quotes(cmd)}
+        if not raw.startswith("{"):
+            return {"command": raw}
+    return None
 
 
 def _run_plan(
@@ -379,6 +405,13 @@ def _run_plan(
         if missing:
             console.print(Rule("Blocked", style="red"))
             console.print(f"Step {idx} blocked; missing requirements: {', '.join(missing)}")
+            return
+        missing_placeholders = _missing_required_placeholders(step)
+        if missing_placeholders:
+            console.print(Rule("Blocked", style="red"))
+            console.print(
+                f"Step {idx} blocked; missing placeholders: {', '.join(missing_placeholders)}"
+            )
             return
         reference_texts = reference_texts_by_skill.get(step.skill, [])
         result = _execute_step(
@@ -442,6 +475,12 @@ def _execute_step(
             state_json=state_json,
         )
         command_text = " ".join(command)
+        if command and not command[0].startswith("mcp__"):
+            try:
+                command = _render_placeholders_in_command(command, session_state)
+            except ValueError as exc:
+                return StepResult(status="blocked", summary=str(exc), raw_output=last_output)
+            command_text = " ".join(command)
         allowed_tools = allowed_tools_for(get_skill_meta(step.skill))
         if allowed_tools:
             console.print(Rule("allowed-tools", style="cyan"))
@@ -474,8 +513,12 @@ def _execute_step(
                     try:
                         args = json.loads(raw)
                     except json.JSONDecodeError:
-                        schema = _get_mcp_schema(server, tool)
-                        args = _repair_mcp_args(user_input, server, tool, raw, schema, messages)
+                        coerced = _coerce_mcp_args(raw, tool)
+                        if coerced is not None:
+                            args = coerced
+                        else:
+                            schema = _get_mcp_schema(server, tool)
+                            args = _repair_mcp_args(user_input, server, tool, raw, schema, messages)
                 else:
                     tools = list_mcp_tools().get(server, [])
                     schema = None
@@ -489,6 +532,10 @@ def _execute_step(
                     pid = args.get("pid")
                     if not pid and last_pid:
                         args["pid"] = last_pid
+                try:
+                    args = _render_placeholders_in_args(args, session_state)
+                except ValueError as exc:
+                    return StepResult(status="blocked", summary=str(exc), raw_output=last_output)
                 console.print(Rule("MCP Args", style="cyan"))
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
                 result = call_mcp_tool(server, tool, args)
@@ -515,8 +562,13 @@ def _execute_step(
                 last_pid = int(pid_match.group(1))
 
         if not tool_loop:
-            summary = _summarize_tool_output(tool_output, user_input)
-            return StepResult(status="ok", summary=summary or "Done.", raw_output=tool_output, artifacts=state.get("artifacts", {}))
+            summary = _short_tool_output_summary(tool_output)
+            return StepResult(
+                status="ok",
+                summary=summary or "Done.",
+                raw_output=tool_output,
+                artifacts=state.get("artifacts", {}),
+            )
 
         messages.append({"role": "assistant", "content": f"Command: {command_text}"})
         messages.append({"role": "user", "content": f"Tool output:\n{tool_output}"})
@@ -544,6 +596,7 @@ def _decide_next_step(messages: list[dict[str, str]], user_input: str) -> dict:
     response = chat_completion(
         [{"role": "system", "content": system}, *messages],
         response_format={"type": "json_object"},
+        purpose="decide_next_step",
     )
     try:
         content = response["choices"][0]["message"]["content"]
@@ -567,11 +620,19 @@ def _summarize_tool_output(tool_output: str, user_input: str) -> str:
             {"role": "user", "content": f"User: {user_input}\nOutput:\n{tool_output}"},
         ],
         response_format={"type": "text"},
+        purpose="summarize_tool_output",
     )
     try:
         return response["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError):
         return ""
+
+
+def _short_tool_output_summary(tool_output: str) -> str:
+    if not tool_output.strip():
+        return ""
+    first = tool_output.strip().splitlines()[0]
+    return first[:200]
 
 
 def _repair_decision(messages: list[dict[str, str]], user_input: str) -> dict:
@@ -582,6 +643,7 @@ def _repair_decision(messages: list[dict[str, str]], user_input: str) -> dict:
     response = chat_completion(
         [{"role": "system", "content": system}, *messages, {"role": "user", "content": f"User: {user_input}"}],
         response_format={"type": "json_object"},
+        purpose="repair_decision",
     )
     try:
         content = response["choices"][0]["message"]["content"]
@@ -711,6 +773,74 @@ def _check_requires(requires: list[str] | None, state: dict[str, object]) -> lis
         if not _resolve_requirement(req, artifacts, state):
             missing.append(req)
     return missing
+
+
+def _missing_required_placeholders(step: SkillStep) -> list[str]:
+    if not step.requires:
+        return []
+    missing = []
+    for req in step.requires:
+        placeholder = f"{{{{{req}}}}}"
+        if placeholder not in step.input:
+            missing.append(placeholder)
+    return missing
+
+
+def _render_step_input(step_input: str, state: dict[str, object]) -> str:
+    pattern = re.compile(r"\\{\\{([^}]+)\\}\\}")
+    artifacts = state.get("artifacts", {})
+
+    def _replace(match: re.Match) -> str:
+        key = match.group(1).strip()
+        if not key:
+            raise ValueError("Empty placeholder in step input.")
+        if not _resolve_requirement(key, artifacts, state):
+            raise ValueError(f"Missing required value for placeholder: {key}")
+        value = _resolve_requirement_value(key, artifacts, state)
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, ensure_ascii=False)
+        return str(value)
+
+    return pattern.sub(_replace, step_input)
+
+
+def _resolve_requirement_value(req: str, artifacts: dict[str, object], state: dict[str, object]) -> object:
+    req = req.strip()
+    if "." not in req:
+        return artifacts.get(req)
+    root, *parts = req.split(".")
+    if root == "artifacts":
+        data: object = artifacts
+    elif root == "state":
+        data = state
+    else:
+        return None
+    for part in parts:
+        if isinstance(data, dict) and part in data:
+            data = data[part]
+        else:
+            return None
+    return data
+
+
+def _render_placeholders_in_command(command: list[str], state: dict[str, object]) -> list[str]:
+    rendered: list[str] = []
+    for item in command:
+        if "{{" in item and "}}" in item:
+            rendered.append(_render_step_input(item, state))
+        else:
+            rendered.append(item)
+    return rendered
+
+
+def _render_placeholders_in_args(args: object, state: dict[str, object]) -> object:
+    if isinstance(args, dict):
+        return {key: _render_placeholders_in_args(value, state) for key, value in args.items()}
+    if isinstance(args, list):
+        return [_render_placeholders_in_args(item, state) for item in args]
+    if isinstance(args, str) and "{{" in args and "}}" in args:
+        return _render_step_input(args, state)
+    return args
 
 
 def _resolve_requirement(req: str, artifacts: dict[str, object], state: dict[str, object]) -> bool:
