@@ -146,6 +146,17 @@ def _render_command_help() -> None:
     console.print(rendered)
 
 
+def _render_banner() -> None:
+    banner = (
+        " ____    _  __  ___   _       _           ____     ___    _____ \n"
+        "/ ___|  | |/ / |_ _| | |     | |         | __ )   / _ \\  |_   _|\n"
+        "\\___ \\  | ' /   | |  | |     | |         |  _ \\  | | | |   | |  \n"
+        " ___) | | . \\   | |  | |___  | |___      | |_) | | |_| |   | |  \n"
+        "|____/  |_|\\_\\ |___| |_____| |_____|     |____/   \\___/    |_|  \n"
+    )
+    console.print(banner, style="bold cyan")
+
+
 def _handle_command(command: str) -> bool:
     if command == "/":
         _render_command_help()
@@ -644,6 +655,8 @@ def run_cli_loop(
     max_loop_count: int = 10,
 ) -> None:
     setup_cli_logger()
+    if initial_query is None:
+        _render_banner()
     session_state: dict[str, object] = {
         "cwd": os.getcwd(),
         "created": set(),
