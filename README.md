@@ -49,9 +49,14 @@ Create `~/.agent-skills-bot/mcp.json` with:
 ```
 {
   "mcpServers": {
-    "desktop-commander": {
+    "filesystem": {
       "command": "npx",
-      "args": ["-y", "@wonderwhy-er/desktop-commander"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/Users/z/Downloads",
+        "/Users/z/Desktop"
+      ]
     }
   }
 }
