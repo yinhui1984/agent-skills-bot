@@ -7,11 +7,16 @@ import os
 import threading
 import time
 
-from rich.rule import Rule
 from rich.text import Text
 
 from agent_skills_bot.interfaces.cli_app import run_cli
-from agent_skills_bot.interfaces.cli_ui import console, _handle_command, _prompt_query, _render_banner
+from agent_skills_bot.interfaces.cli_theme import (
+    INFO_RULE_STYLE,
+    WARNING_RULE_STYLE,
+    console,
+    _render_rule,
+)
+from agent_skills_bot.interfaces.cli_ui import _handle_command, _prompt_query, _render_banner
 from agent_skills_bot.utils.logger import setup_cli_logger
 from agent_skills_bot.utils.mcp_client import drain_mcp_notifications
 
@@ -54,7 +59,7 @@ def run_cli_loop(
             if pending.startswith("/"):
                 handled = _handle_command(pending)
                 if not handled:
-                    console.print(Rule("Command", style="yellow"))
+                    _render_rule("Command", style=WARNING_RULE_STYLE)
                     console.print("Unknown command. Try /help")
                 pending = None
                 if not loop:
@@ -80,7 +85,7 @@ def _notification_loop(stop_event: threading.Event) -> None:
     while not stop_event.is_set():
         notes = drain_mcp_notifications()
         if notes:
-            console.print(Rule("MCP Notifications", style="blue"))
+            _render_rule("MCP Notifications", style=INFO_RULE_STYLE)
             rendered = Text()
             for server, items in notes.items():
                 rendered.append(f"{server}\n", style="bold")

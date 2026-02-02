@@ -8,7 +8,6 @@ import logging
 import os
 import re
 
-from rich.rule import Rule
 
 from agent_skills_bot.core.models import SkillPlan, SkillStep, StepResult
 from agent_skills_bot.core.router import route_plan
@@ -38,10 +37,20 @@ from agent_skills_bot.interfaces.cli_state import (
     _update_artifacts_from_output,
     _update_state_from_command_and_output,
 )
-from agent_skills_bot.interfaces.cli_ui import console, _render_output, _render_plan
+from agent_skills_bot.interfaces.cli_theme import (
+    ERROR_RULE_STYLE,
+    INFO_RULE_STYLE,
+    RESULT_RULE_STYLE,
+    WARNING_RULE_STYLE,
+    console,
+    _render_rule,
+)
+from agent_skills_bot.interfaces.cli_ui import _render_output, _render_plan
 from agent_skills_bot.utils.deepseek_client import chat_completion
 from agent_skills_bot.utils.logger import setup_cli_logger
 from agent_skills_bot.utils.mcp_client import call_mcp_tool, list_mcp_tools
+
+
 
 
 def run_cli(
@@ -77,14 +86,14 @@ def run_cli(
             references = list_reference_files(step.skill)
             if not references:
                 continue
-            console.print(Rule(f"References ({step.skill})", style="cyan"))
+            _render_rule(f"References ({step.skill})", style=INFO_RULE_STYLE)
             console.print("\n".join(references))
             load_refs = console.input("Load references into context? (Y/n): ").strip().lower()
             if not load_refs or load_refs in {"y", "yes"}:
                 reference_texts_by_skill[step.skill] = read_reference_files(references)
     except Exception as exc:
         logger.error(str(exc))
-        console.print(Rule("Error", style="red"))
+        _render_rule("Error", style=ERROR_RULE_STYLE)
         console.print(str(exc))
         return
 
@@ -115,12 +124,12 @@ def _run_plan(
     for idx, step in enumerate(plan.steps, 1):
         missing = _check_requires(step.requires, session_state)
         if missing:
-            console.print(Rule("Blocked", style="red"))
+            _render_rule("Blocked", style=ERROR_RULE_STYLE)
             console.print(f"Step {idx} blocked; missing requirements: {', '.join(missing)}")
             return
         missing_placeholders = _missing_required_placeholders(step)
         if missing_placeholders:
-            console.print(Rule("Blocked", style="red"))
+            _render_rule("Blocked", style=ERROR_RULE_STYLE)
             console.print(
                 f"Step {idx} blocked; missing placeholders: {', '.join(missing_placeholders)}"
             )
@@ -135,10 +144,10 @@ def _run_plan(
             session_state=session_state,
         )
         if result.status != "ok":
-            console.print(Rule("Error", style="red"))
+            _render_rule("Error", style=ERROR_RULE_STYLE)
             console.print(result.summary or "Step failed.")
             return
-    console.print(Rule("Result", style="green"))
+    _render_rule("Result", style=RESULT_RULE_STYLE)
     console.print("Plan complete.")
 
 
@@ -173,7 +182,7 @@ def _execute_step(
     while True:
         loop_step += 1
         if loop_step > max_loop_count:
-            console.print(Rule("Warning", style="yellow"))
+            _render_rule("Warning", style=WARNING_RULE_STYLE)
             console.print("Max loop count reached.")
             return StepResult(status="max_loop", summary="Max loop count reached.", raw_output=last_output)
         state_summary = _render_state_summary(state)
@@ -195,22 +204,24 @@ def _execute_step(
             command_text = " ".join(command)
         allowed_tools = allowed_tools_for(get_skill_meta(step.skill))
         if allowed_tools:
-            console.print(Rule("allowed-tools", style="cyan"))
+            _render_rule("allowed-tools", style=INFO_RULE_STYLE)
             console.print(", ".join(allowed_tools))
             if command and command[0] not in allowed_tools:
-                console.print(Rule("Blocked", style="red"))
+                _render_rule("Blocked", style=ERROR_RULE_STYLE)
                 console.print(f"Command tool '{command[0]}' is not in allowed-tools.")
                 return StepResult(
                     status="blocked",
                     summary=f"Command tool '{command[0]}' is not in allowed-tools.",
                     raw_output=last_output,
                 )
-        console.print(Rule("Command", style="magenta"))
+        _render_rule("Command", style=INFO_RULE_STYLE)
         console.print(command_text)
         confirm = console.input("[bold yellow]Execute command?[/bold yellow] (Y/n): ").strip().lower()
         if confirm and confirm not in {"y", "yes"}:
+            console.print()
             console.print("Cancelled.", style="dim")
             return StepResult(status="cancelled", summary="Cancelled by user.", raw_output=last_output)
+        console.print()
 
         try:
             if command and command[0].startswith("mcp__"):
@@ -248,7 +259,7 @@ def _execute_step(
                     args = _render_placeholders_in_args(args, session_state)
                 except ValueError as exc:
                     return StepResult(status="blocked", summary=str(exc), raw_output=last_output)
-                console.print(Rule("MCP Args", style="cyan"))
+                _render_rule("MCP Args", style=INFO_RULE_STYLE)
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
                 result = call_mcp_tool(server, tool, args)
                 output = json.dumps(result, indent=2, ensure_ascii=False)
@@ -260,7 +271,7 @@ def _execute_step(
                 tool_output = result.raw_output
         except Exception as exc:
             logger.error(str(exc))
-            console.print(Rule("Error", style="red"))
+            _render_rule("Error", style=ERROR_RULE_STYLE)
             console.print(str(exc))
             return StepResult(status="error", summary=str(exc), raw_output=last_output)
 
@@ -290,7 +301,7 @@ def _execute_step(
         messages.append({"role": "user", "content": _render_state_summary(state)})
         decision = _decide_next_step(messages, user_input)
         if decision.get("done"):
-            console.print(Rule("Result", style="green"))
+            _render_rule("Result", style=RESULT_RULE_STYLE)
             console.print(decision.get("summary", "Done."))
             return StepResult(
                 status="ok",
@@ -300,7 +311,7 @@ def _execute_step(
             )
         current_query = decision.get("next_input", "")
         if not current_query:
-            console.print(Rule("Warning", style="yellow"))
+            _render_rule("Warning", style=WARNING_RULE_STYLE)
             console.print("No next step provided; stopping.")
             return StepResult(status="stopped", summary="No next step provided.", raw_output=tool_output)
 

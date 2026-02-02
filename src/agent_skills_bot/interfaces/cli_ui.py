@@ -13,20 +13,21 @@ from prompt_toolkit.layout.containers import HSplit, ConditionalContainer
 from prompt_toolkit.filters import Condition
 from prompt_toolkit.styles import Style as PTStyle
 from prompt_toolkit.widgets import Frame, TextArea, Label
-from rich.console import Console
-from rich.rule import Rule
 from rich.text import Text
 
 from agent_skills_bot.core.models import SkillPlan
 from agent_skills_bot.core.skills import load_skills
+from agent_skills_bot.interfaces.cli_theme import (
+    INFO_RULE_STYLE,
+    RESULT_RULE_STYLE,
+    console,
+    _render_rule,
+)
 from agent_skills_bot.utils.mcp_client import (
     drain_mcp_notifications,
     list_mcp_servers,
     list_mcp_tools_summary,
 )
-
-
-console = Console()
 _QUERY_HISTORY = InMemoryHistory()
 
 COMMANDS = {
@@ -100,7 +101,7 @@ def _prompt_query() -> str:
 
 def _render_output(lines: list[str]) -> None:
     if not lines:
-        console.print(Rule("Result", style="green"))
+        _render_rule("Result", style=RESULT_RULE_STYLE)
         console.print("(no output)")
         return
 
@@ -113,7 +114,7 @@ def _render_output(lines: list[str]) -> None:
         else:
             rendered.append(line + "\n")
 
-    console.print(Rule("Result", style="green"))
+    _render_rule("Result", style=RESULT_RULE_STYLE)
     console.print(rendered)
 
 
@@ -122,7 +123,7 @@ def _render_command_help() -> None:
     for cmd, desc in COMMANDS.items():
         rendered.append(f"{cmd}\n", style="bold")
         rendered.append(f"  {desc}\n")
-    console.print(Rule("Commands", style="blue"))
+    _render_rule("Commands", style=INFO_RULE_STYLE)
     console.print(rendered)
 
 
@@ -138,7 +139,7 @@ def _render_banner() -> None:
 
 
 def _render_plan(plan: SkillPlan) -> None:
-    console.print(Rule("Plan", style="blue"))
+    _render_rule("Plan", style=INFO_RULE_STYLE)
     for idx, step in enumerate(plan.steps, 1):
         requires = ", ".join(step.requires or []) if step.requires else "(none)"
         notes = step.notes or ""
@@ -159,7 +160,7 @@ def _handle_command(command: str) -> bool:
     if command == "/list":
         skills = load_skills()
         if not skills:
-            console.print(Rule("Skills", style="yellow"))
+            _render_rule("Skills", style=INFO_RULE_STYLE)
             console.print("(no skills found)")
             return True
         rendered = Text()
@@ -167,12 +168,12 @@ def _handle_command(command: str) -> bool:
             rendered.append(f"{skill.name}\n", style="bold")
             rendered.append(f"  {skill.description}\n")
             rendered.append(f"  {skill.path}\n\n", style="dim")
-        console.print(Rule("Skills", style="green"))
+        _render_rule("Skills", style=INFO_RULE_STYLE)
         console.print(rendered)
         return True
     if command == "/mcp":
         servers = list_mcp_servers()
-        console.print(Rule("MCP", style="blue"))
+        _render_rule("MCP", style=INFO_RULE_STYLE)
         if not servers:
             console.print("(no MCP servers configured)")
             return True
@@ -192,7 +193,7 @@ def _handle_command(command: str) -> bool:
         return True
     if command == "/mcp-notifications":
         notes = drain_mcp_notifications()
-        console.print(Rule("MCP Notifications", style="blue"))
+        _render_rule("MCP Notifications", style=INFO_RULE_STYLE)
         if not notes:
             console.print("(no notifications)")
             return True
