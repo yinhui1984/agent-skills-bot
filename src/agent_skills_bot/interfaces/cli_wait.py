@@ -9,6 +9,8 @@ from contextlib import contextmanager
 from rich.live import Live
 from rich.text import Text
 
+from agent_skills_bot.utils.logger import set_live_animation
+
 
 FRAMES = [
     "(o     )",
@@ -48,11 +50,15 @@ def wait_animation(message: str, *, console, enabled: bool = True):
             idx += 1
             time.sleep(FRAME_DELAY)
 
-    with Live(Text(""), console=console, refresh_per_second=30, transient=True) as live:
-        thread = threading.Thread(target=_run, args=(live,), daemon=True)
-        thread.start()
-        try:
-            yield
-        finally:
-            stop_event.set()
-            thread.join(timeout=1)
+    set_live_animation(True)
+    try:
+        with Live(Text(""), console=console, refresh_per_second=30, transient=True) as live:
+            thread = threading.Thread(target=_run, args=(live,), daemon=True)
+            thread.start()
+            try:
+                yield
+            finally:
+                stop_event.set()
+                thread.join(timeout=1)
+    finally:
+        set_live_animation(False)

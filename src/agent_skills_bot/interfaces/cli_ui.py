@@ -106,14 +106,18 @@ def _render_output(lines: list[str]) -> None:
         console.print("(no output)")
         return
 
-    rendered = Text("", no_wrap=False)
-    for line in lines:
-        if line.startswith("\u2514 "):
-            rendered.append(line + "\n", style="dim")
-        elif line.strip() == "":
-            rendered.append("\n")
-        else:
-            rendered.append(line + "\n")
+    joined = "\n".join(lines)
+    if "\x1b[" in joined:
+        rendered = Text.from_ansi(joined)
+    else:
+        rendered = Text("", no_wrap=False)
+        for line in lines:
+            if line.startswith("\u2514 "):
+                rendered.append(line + "\n", style="dim")
+            elif line.strip() == "":
+                rendered.append("\n")
+            else:
+                rendered.append(line + "\n")
 
     _render_rule("Result", style=RESULT_RULE_STYLE)
     console.print(rendered)

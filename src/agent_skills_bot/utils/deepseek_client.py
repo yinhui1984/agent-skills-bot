@@ -26,6 +26,9 @@ def _require_api_key() -> str:
     return api_key
 
 
+SHORT_RESPONSE_THRESHOLD = 20
+
+
 def chat_completion(
     messages: List[Dict[str, str]],
     *,
@@ -37,9 +40,7 @@ def chat_completion(
     base_url = os.environ.get("DEEPSEEK_BASE_URL", DEFAULT_BASE_URL)
     model = model or os.environ.get("DEEPSEEK_MODEL", DEFAULT_MODEL)
 
-    messages_len = _messages_length(messages)
     request_purpose = purpose or "unspecified"
-    logger.info("AI request purpose=%s model=%s messages_len=%s", request_purpose, model, messages_len)
     start = time.monotonic()
 
     payload = {
@@ -59,19 +60,24 @@ def chat_completion(
         },
     )
 
+    body = ""
+    error: Exception | None = None
     try:
         with urllib.request.urlopen(req, timeout=60) as resp:
             body = resp.read().decode("utf-8")
     except Exception as exc:
+        error = exc
         raise DeepSeekError(f"DeepSeek request failed: {exc}") from exc
     finally:
         elapsed_ms = int((time.monotonic() - start) * 1000)
-        logger.info(
-            "AI response purpose=%s bytes=%s elapsed_ms=%s",
-            request_purpose,
-            len(locals().get("body", "") or ""),
-            elapsed_ms,
-        )
+        if error is not None or len(body) <= SHORT_RESPONSE_THRESHOLD:
+            logger.warning(
+                "AI response issue purpose=%s bytes=%s elapsed_ms=%s error=%s",
+                request_purpose,
+                len(body or ""),
+                elapsed_ms,
+                error or "",
+            )
 
     try:
         return json.loads(body)

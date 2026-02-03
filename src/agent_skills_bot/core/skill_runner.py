@@ -20,6 +20,7 @@ from agent_skills_bot.utils.mcp_client import list_mcp_tools_summary
 
 DEFAULT_SKILLS_ROOT = os.path.expanduser("~/.agent-skills-bot/skills")
 logger = logging.getLogger("app.core")
+SHORT_SKILL_OUTPUT_THRESHOLD = 20
 
 
 def _skill_dir(skill: str) -> pathlib.Path:
@@ -178,6 +179,18 @@ def _run_command(command: List[str]) -> str:
         capture_output=True,
         text=True,
     )
+    stdout_len = len(result.stdout or "")
+    stderr_len = len(result.stderr or "")
+    if result.returncode != 0 or stdout_len <= SHORT_SKILL_OUTPUT_THRESHOLD:
+        logger.warning(
+            "Skill command issue rc=%s stdout_len=%s stderr_len=%s",
+            result.returncode,
+            stdout_len,
+            stderr_len,
+        )
+        if result.stdout:
+            preview = result.stdout[:200].replace("\n", "\\n").replace("\r", "\\r")
+            logger.warning("Skill stdout preview=%s", preview)
     output = (result.stdout or "") + (result.stderr or "")
     if result.returncode != 0:
         raise RuntimeError(f"Skill command failed with code {result.returncode}\n{output}")
@@ -241,7 +254,7 @@ def read_reference_files(paths: List[str]) -> List[str]:
 
 
 async def execute_command(skill_name: str, command: List[str]) -> SkillResult:
-    logger.info("Running skill: %s", skill_name)
+    logger.debug("Running skill: %s", skill_name)
     resolved = _resolve_command(skill_name, command)
     output = await asyncio.to_thread(_run_command, resolved)
     lines = [line for line in output.splitlines() if line.strip()]

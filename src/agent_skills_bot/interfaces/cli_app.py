@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import shlex
+import pathlib
 
 from agent_skills_bot.core.models import SkillPlan, SkillStep, StepResult
 from agent_skills_bot.core.router import route_plan
@@ -59,6 +60,31 @@ from agent_skills_bot.utils.mcp_client import call_mcp_tool, list_mcp_tools
 
 
 SHELL_SEPARATORS = {"|", "&&", ";", "||"}
+
+
+def _is_skill_direct_command(skill_name: str, command: list[str]) -> bool:
+    if not command:
+        return False
+    head = command[0]
+    if head.startswith("mcp__"):
+        return False
+    interpreters = {"python", "python3", "node", "bash", "sh"}
+    skill_root = pathlib.Path(get_skill_meta(skill_name).path).resolve()
+
+    def _path_under_skill(path_str: str) -> bool:
+        try:
+            path = pathlib.Path(path_str)
+            if not path.is_absolute():
+                path = (skill_root / path).resolve()
+            else:
+                path = path.resolve()
+            return skill_root in path.parents or path == skill_root
+        except (OSError, RuntimeError):
+            return False
+
+    if head in interpreters and len(command) > 1:
+        return _path_under_skill(command[1])
+    return _path_under_skill(head)
 
 
 def _repair_unbalanced_quotes(command: str) -> tuple[str, str | None, bool]:
@@ -236,31 +262,33 @@ def _execute_step(
             command_text = " ".join(command)
         allowed_tools = allowed_tools_for(get_skill_meta(step.skill))
         if command and not command[0].startswith("mcp__"):
-            if "mcp__shell_mcp__run_command" not in allowed_tools:
-                _render_rule("Blocked", style=ERROR_RULE_STYLE)
-                console.print("Direct shell commands are disabled; allow mcp__shell_mcp__run_command.")
-                return StepResult(
-                    status="blocked",
-                    summary="Direct shell commands are disabled; allow mcp__shell_mcp__run_command.",
-                    raw_output=last_output,
-                )
-            if not is_command_allowed(command, allowlist):
-                blocked = find_blocked_command(command, allowlist)
-                blocked_cmd = blocked or (command[0] if command else "")
-                _render_rule("Blocked", style=ERROR_RULE_STYLE)
-                console.print(f"Shell command not in allowlist: {blocked_cmd}")
-                return StepResult(
-                    status="blocked",
-                    summary=f"Shell command not in allowlist: {blocked_cmd}",
-                    raw_output=last_output,
-                )
-            payload = json.dumps({"command": command_text}, ensure_ascii=False)
-            command = ["mcp__shell_mcp__run_command", payload]
-            command_text = " ".join(command)
+            is_skill_direct = _is_skill_direct_command(step.skill, command)
+            if not is_skill_direct:
+                if "mcp__shell_mcp__run_command" not in allowed_tools:
+                    _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                    console.print("Direct shell commands are disabled; allow mcp__shell_mcp__run_command.")
+                    return StepResult(
+                        status="blocked",
+                        summary="Direct shell commands are disabled; allow mcp__shell_mcp__run_command.",
+                        raw_output=last_output,
+                    )
+                if not is_command_allowed(command, allowlist):
+                    blocked = find_blocked_command(command, allowlist)
+                    blocked_cmd = blocked or (command[0] if command else "")
+                    _render_rule("Blocked", style=ERROR_RULE_STYLE)
+                    console.print(f"Shell command not in allowlist: {blocked_cmd}")
+                    return StepResult(
+                        status="blocked",
+                        summary=f"Shell command not in allowlist: {blocked_cmd}",
+                        raw_output=last_output,
+                    )
+                payload = json.dumps({"command": command_text}, ensure_ascii=False)
+                command = ["mcp__shell_mcp__run_command", payload]
+                command_text = " ".join(command)
         if allowed_tools:
             _render_rule("allowed-tools", style=INFO_RULE_STYLE)
             console.print(", ".join(allowed_tools))
-            if command and command[0] not in allowed_tools:
+            if command and command[0] not in allowed_tools and not _is_skill_direct_command(step.skill, command):
                 _render_rule("Blocked", style=ERROR_RULE_STYLE)
                 console.print(f"Command tool '{command[0]}' is not in allowed-tools.")
                 return StepResult(
@@ -380,7 +408,8 @@ def _execute_step(
             else:
                 with wait_animation("Executing tools", console=console, enabled=show_wait_animation):
                     result = asyncio.run(execute_command(step.skill, command))
-                _render_output(result.lines)
+                lines = result.lines or result.raw_output.splitlines()
+                _render_output(lines)
                 tool_output = result.raw_output
         except Exception as exc:
             logger.error(str(exc))
