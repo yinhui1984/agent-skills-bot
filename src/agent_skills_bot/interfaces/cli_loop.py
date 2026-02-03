@@ -31,7 +31,7 @@ def run_cli_loop(
     tool_loop: bool = True,
     max_loop_count: int = 10,
 ) -> None:
-    setup_cli_logger()
+    setup_cli_logger(suppress_ai_logs=True)
     ensure_default_user_config()
     if initial_query is None:
         _render_banner()
@@ -72,6 +72,8 @@ def run_cli_loop(
                 tool_loop=tool_loop,
                 max_loop_count=max_loop_count,
                 session_state=session_state,
+                suppress_ai_logs=True,
+                show_wait_animation=True,
             )
             console.print()
             pending = None

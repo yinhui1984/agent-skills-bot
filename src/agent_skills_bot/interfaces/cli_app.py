@@ -46,6 +46,7 @@ from agent_skills_bot.interfaces.cli_theme import (
     _render_rule,
 )
 from agent_skills_bot.interfaces.cli_ui import _render_output, _render_plan
+from agent_skills_bot.interfaces.cli_wait import wait_animation
 from agent_skills_bot.utils.bootstrap import ensure_default_user_config
 from agent_skills_bot.utils.command_allowlist import (
     find_blocked_command,
@@ -78,8 +79,10 @@ def run_cli(
     tool_loop: bool = True,
     max_loop_count: int = 10,
     session_state: dict[str, object] | None = None,
+    suppress_ai_logs: bool = False,
+    show_wait_animation: bool = False,
 ) -> None:
-    setup_cli_logger()
+    setup_cli_logger(suppress_ai_logs=suppress_ai_logs)
     ensure_default_user_config()
     logger = logging.getLogger("app.core")
     if session_state is None:
@@ -93,10 +96,12 @@ def run_cli(
             "artifacts": {},
         }
 
-    console.print("Running...", style="yellow")
+    if not show_wait_animation:
+        console.print("Running...", style="yellow")
 
     try:
-        plan = route_plan(user_input)
+        with wait_animation("Mapping a plan", console=console, enabled=show_wait_animation):
+            plan = route_plan(user_input)
         _render_plan(plan)
         reference_texts_by_skill: dict[str, list[str]] = {}
         seen_skills: set[str] = set()
@@ -125,6 +130,7 @@ def run_cli(
         tool_loop=tool_loop,
         max_loop_count=max_loop_count,
         session_state=session_state,
+        show_wait_animation=show_wait_animation,
     )
 
 
@@ -135,6 +141,7 @@ def _run_plan(
     tool_loop: bool,
     max_loop_count: int,
     session_state: dict[str, object],
+    show_wait_animation: bool,
 ) -> None:
     effective_loop = tool_loop if len(plan.steps) == 1 else False
     if len(plan.steps) > 1 and tool_loop:
@@ -163,6 +170,7 @@ def _run_plan(
             tool_loop=effective_loop,
             max_loop_count=max_loop_count,
             session_state=session_state,
+            show_wait_animation=show_wait_animation,
         )
         if result.status != "ok":
             _render_rule("Error", style=ERROR_RULE_STYLE)
@@ -179,6 +187,7 @@ def _execute_step(
     tool_loop: bool,
     max_loop_count: int,
     session_state: dict[str, object],
+    show_wait_animation: bool,
 ) -> StepResult:
     logger = logging.getLogger("app.core")
     state = session_state
@@ -210,13 +219,14 @@ def _execute_step(
         state_summary = _render_state_summary(state)
         state_json = _render_state_json(state)
         command_query = current_query
-        command = build_command(
-            step.skill,
-            command_query,
-            reference_texts,
-            state_summary=state_summary,
-            state_json=state_json,
-        )
+        with wait_animation("Synthesizing command", console=console, enabled=show_wait_animation):
+            command = build_command(
+                step.skill,
+                command_query,
+                reference_texts,
+                state_summary=state_summary,
+                state_json=state_json,
+            )
         command_text = " ".join(command)
         if command and not command[0].startswith("mcp__"):
             try:
@@ -285,7 +295,12 @@ def _execute_step(
                             args = coerced
                         else:
                             schema = _get_mcp_schema(server, tool)
-                            args = _repair_mcp_args(user_input, server, tool, raw, schema, messages)
+                            with wait_animation(
+                                "Repairing MCP args",
+                                console=console,
+                                enabled=show_wait_animation,
+                            ):
+                                args = _repair_mcp_args(user_input, server, tool, raw, schema, messages)
                 else:
                     tools = list_mcp_tools().get(server, [])
                     schema = None
@@ -293,7 +308,12 @@ def _execute_step(
                         if item.get("name") == tool:
                             schema = item.get("inputSchema")
                             break
-                    args = _infer_mcp_args(user_input, server, tool, schema, messages)
+                    with wait_animation(
+                        "Inferring MCP args",
+                        console=console,
+                        enabled=show_wait_animation,
+                    ):
+                        args = _infer_mcp_args(user_input, server, tool, schema, messages)
                 args = _normalize_mcp_args(args)
                 if tool == "read_process_output":
                     pid = args.get("pid")
@@ -352,12 +372,14 @@ def _execute_step(
                     args["command"] = cmd_value
                 _render_rule("MCP Args", style=INFO_RULE_STYLE)
                 console.print(json.dumps(args, indent=2, ensure_ascii=False))
-                result = call_mcp_tool(server, tool, args)
+                with wait_animation("Executing tool call", console=console, enabled=show_wait_animation):
+                    result = call_mcp_tool(server, tool, args)
                 output = json.dumps(result, indent=2, ensure_ascii=False)
                 _render_output(output.splitlines())
                 tool_output = output
             else:
-                result = asyncio.run(execute_command(step.skill, command))
+                with wait_animation("Executing tools", console=console, enabled=show_wait_animation):
+                    result = asyncio.run(execute_command(step.skill, command))
                 _render_output(result.lines)
                 tool_output = result.raw_output
         except Exception as exc:
@@ -386,11 +408,19 @@ def _execute_step(
 
         messages.append({"role": "assistant", "content": f"Command: {command_text}"})
         messages.append({"role": "user", "content": f"Tool output:\n{tool_output}"})
-        summary = _summarize_tool_output(tool_output, user_input)
+        summary = _summarize_tool_output(
+            tool_output,
+            user_input,
+            show_wait_animation=show_wait_animation,
+        )
         if summary:
             messages.append({"role": "assistant", "content": f"Tool summary: {summary}"})
         messages.append({"role": "user", "content": _render_state_summary(state)})
-        decision = _decide_next_step(messages, user_input)
+        decision = _decide_next_step(
+            messages,
+            user_input,
+            show_wait_animation=show_wait_animation,
+        )
         if decision.get("done"):
             _render_rule("Result", style=RESULT_RULE_STYLE)
             console.print(decision.get("summary", "Done."))
@@ -407,24 +437,35 @@ def _execute_step(
             return StepResult(status="stopped", summary="No next step provided.", raw_output=tool_output)
 
 
-def _decide_next_step(messages: list[dict[str, str]], user_input: str) -> dict:
+def _decide_next_step(
+    messages: list[dict[str, str]],
+    user_input: str,
+    *,
+    show_wait_animation: bool = False,
+) -> dict:
     system = (
         "Return json only. Decide whether the task is complete. "
         "Schema: {\"done\": true|false, \"summary\": \"...\", \"next_input\": \"...\"}."
     )
-    response = chat_completion(
-        [{"role": "system", "content": system}, *messages],
-        response_format={"type": "json_object"},
-        purpose="decide_next_step",
-    )
+    with wait_animation("Deciding next step", console=console, enabled=show_wait_animation):
+        response = chat_completion(
+            [{"role": "system", "content": system}, *messages],
+            response_format={"type": "json_object"},
+            purpose="decide_next_step",
+        )
     try:
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
-        return _repair_decision(messages, user_input)
+        return _repair_decision(messages, user_input, show_wait_animation=show_wait_animation)
 
 
-def _summarize_tool_output(tool_output: str, user_input: str) -> str:
+def _summarize_tool_output(
+    tool_output: str,
+    user_input: str,
+    *,
+    show_wait_animation: bool = False,
+) -> str:
     if not tool_output.strip():
         return ""
     if len(tool_output) < 400:
@@ -433,14 +474,15 @@ def _summarize_tool_output(tool_output: str, user_input: str) -> str:
         "Summarize the tool output in one short sentence focused on task completion. "
         "Do not include extra commentary."
     )
-    response = chat_completion(
-        [
-            {"role": "system", "content": system},
-            {"role": "user", "content": f"User: {user_input}\nOutput:\n{tool_output}"},
-        ],
-        response_format={"type": "text"},
-        purpose="summarize_tool_output",
-    )
+    with wait_animation("Summarizing tool output", console=console, enabled=show_wait_animation):
+        response = chat_completion(
+            [
+                {"role": "system", "content": system},
+                {"role": "user", "content": f"User: {user_input}\nOutput:\n{tool_output}"},
+            ],
+            response_format={"type": "text"},
+            purpose="summarize_tool_output",
+        )
     try:
         return response["choices"][0]["message"]["content"].strip()
     except (KeyError, IndexError, TypeError):
@@ -454,16 +496,26 @@ def _short_tool_output_summary(tool_output: str) -> str:
     return first[:200]
 
 
-def _repair_decision(messages: list[dict[str, str]], user_input: str) -> dict:
+def _repair_decision(
+    messages: list[dict[str, str]],
+    user_input: str,
+    *,
+    show_wait_animation: bool = False,
+) -> dict:
     system = (
         "Return json only. Repair the decision into valid JSON. "
         "Schema: {\"done\": true|false, \"summary\": \"...\", \"next_input\": \"...\"}."
     )
-    response = chat_completion(
-        [{"role": "system", "content": system}, *messages, {"role": "user", "content": f"User: {user_input}"}],
-        response_format={"type": "json_object"},
-        purpose="repair_decision",
-    )
+    with wait_animation("Repairing decision", console=console, enabled=show_wait_animation):
+        response = chat_completion(
+            [
+                {"role": "system", "content": system},
+                *messages,
+                {"role": "user", "content": f"User: {user_input}"},
+            ],
+            response_format={"type": "json_object"},
+            purpose="repair_decision",
+        )
     try:
         content = response["choices"][0]["message"]["content"]
         return json.loads(content)
