@@ -257,7 +257,7 @@ async def execute_command(skill_name: str, command: List[str]) -> SkillResult:
     logger.debug("Running skill: %s", skill_name)
     resolved = _resolve_command(skill_name, command)
     output = await asyncio.to_thread(_run_command, resolved)
-    lines = [line for line in output.splitlines() if line.strip()]
+    lines = output.splitlines()
     return SkillResult(skill=skill_name, raw_output=output, lines=lines)
 
 
